@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Weather App</title>
+    <script src="app.js"></script>
+</head>
+<body>
+    <label for="location">Location:</label>
+    <input type="text" id="location">
+
+    <label for="latitude">Latitude:</label>
+    <input type="text" id="latitude">
+
+    <label for="longitude">Longitude:</label>
+    <input type="text" id="longitude">
+
+    <label for="date">Date:</label>
+    <input type="date" id="date">
+
+    <label for="delta">Delta (days):</label>
+    <input type="number" id="delta" value="5">
+
+    <label for="years_to_get_history">Years of History:</label>
+    <input type="number" id="years_to_get_history" value="24">
+
+    <button onclick="getWeather()">Get Weather</button>
+
+    <br>
+    <br>
+    <div id="chart" style="font-family: monospace;"></div>
+
+</body>
+</html>
