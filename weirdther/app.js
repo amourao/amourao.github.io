@@ -50,6 +50,12 @@ async function getWeather(){
         document.getElementById("longitude").value = "";
         await geocode();
     }
+    
+    if (document.getElementById("latitude").value == "" || document.getElementById("longitude").value == "") {
+        document.getElementById("chart").innerHTML = "Location not found";
+        return;
+    }
+
     const latitude = parseFloat(document.getElementById("latitude").value);
     const longitude = parseFloat(document.getElementById("longitude").value);
 
