@@ -191,11 +191,25 @@ async function getWeather(){
     let currentVal = getCurrentValue(current, date);
     document.getElementById('chart').innerHTML = "";
     document.getElementById('summary').innerHTML = "";
+
+    document.getElementById('summary').innerHTML += "Current weather:<br>";
     for (const varName of varsToGetDaily) {
         let chart = createAsciiChart(varName, gg[varName], currentVal[varName], date, historical_grouped[varName]);
         document.getElementById('chart').innerHTML += chart;
-        document.getElementById('summary').innerHTML += friendlyStats(historical_grouped[varName], currentVal[varName], varName, units) + "<br>";
+        document.getElementById('summary').innerHTML += friendlyStats(historical_grouped[varName], current[1]["daily"][varName], varName, units) + "<br>";
     }
+    document.getElementById('summary').innerHTML += "<br>Past weather:<br>";
+
+    for (const varName of varsToGetDaily) {
+        document.getElementById('summary').innerHTML += friendlyStats(historical_grouped[varName], current[0]["daily"][varName], varName, units) + "<br>";
+    }
+    document.getElementById('summary').innerHTML += "<br>Forecast:<br>";
+
+    for (const varName of varsToGetDaily) {
+        document.getElementById('summary').innerHTML += friendlyStats(historical_grouped[varName], current[2]["daily"][varName], varName, units) + "<br>";
+    }
+    document.getElementById('summary').innerHTML += "<br>";
+
 }
 
 
@@ -254,50 +268,63 @@ function maxValuesToValues(maxValues) {
     return values;
 }
 
-function friendlyStats(data, current_value, var_name, unit_type) {
+function friendlyStats(data, current_series, var_name, unit_type) {
     var friendly_name = FRIENDLY_NAMES[var_name]["name"];
     data = data.sort((a, b) => parseFloat(a) - parseFloat(b));
     var mean = getMean(data);
     var median = getMedian(data);
-    const percentile = findPercentileForValue(data, current_value);
+    var series_percentile = [0, 0, 0]
+    var series_mean = getMean(current_series);
+    var series_median = getMedian(current_series);
+    for (var i = 0; i < current_series.length; i++) {
+        const percentileData = findPercentileForValue(data, current_series[i]);
+        series_percentile[0] += percentileData[0];
+        series_percentile[1] += percentileData[1];
+        series_percentile[2] += percentileData[2];
+    }
+    series_percentile[0] /= current_series.length;
+    series_percentile[1] /= current_series.length;
+    series_percentile[2] /= current_series.length;
+
     if (var_name === "sunshine_duration") {
-        mean = mean / 3600;
-        median = median / 3600;
-        current_value = current_value / 3600;
+        mean /= 3600;
+        median /= 3600;
+        series_mean /= 3600;
+        series_median /= 3600;
     }
     var qualifier = "";
     var boldStart = "";
     var boldEnd = "";
-    if (percentile[1] == 0 && percentile[2] == -1) {
-        return `${friendly_name}: ${current_value.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}. Not expected this time of year.`;
-    } else if (percentile[0] == 0) {
+    if (series_percentile[1] == 0 && series_percentile[2] == -1) {
+        return `${friendly_name}: ${series_mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}. Not expected this time of year.`;
+    } else if (series_percentile[0] == 0) {
         qualifier = "minimum value recorded for the time period, median";
         boldStart = "<b style='color:blue'>";
         boldEnd = "</b>";
-    } else if (percentile[0] == 1) {
+    } else if (series_percentile[0] == 1) {
         qualifier = "maximum value recorded for the time period, median";
         boldStart = "<b style='color:red'>";
         boldEnd = "</b>";  
-    } else if (percentile[0] < 0.05) {
+    } else if (series_percentile[0] < 0.05) {
         qualifier = "much " + FRIENDLY_NAMES[var_name]["lower"] + " than median"
         boldStart = "<b>";
         boldEnd = "</b>";
-    } else if (percentile[0] > 0.95) {
+    } else if (series_percentile[0] > 0.95) {
         qualifier = "much " + FRIENDLY_NAMES[var_name]["higher"] + " than median"
         boldStart = "<b>";
         boldEnd = "</b>";
-    } else if (percentile[0] < 0.25) {
+    } else if (series_percentile[0] < 0.25) {
         qualifier = FRIENDLY_NAMES[var_name]["lower"] + " than median";
         boldStart = "<b>";
         boldEnd = "</b>";
-    } else if (percentile[0] > 0.75) {
+    } else if (series_percentile[0] > 0.75) {
         qualifier = FRIENDLY_NAMES[var_name]["higher"] + " than median";
         boldStart = "<b>";
         boldEnd = "</b>";
     }  else {
         qualifier = "close to median";
     }
-    return `${boldStart}${friendly_name}: ${current_value.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} (${median.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}) and average (${mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}), percentile: ${percentile[0].toFixed(2)}${boldEnd}`;
+    return `${boldStart}${friendly_name}: ${series_mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} (${median.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}) and average (${mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}), percentile: ${series_percentile[0].toFixed(2)}${boldEnd}`;
     
 }
 
