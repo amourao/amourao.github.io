@@ -1,4 +1,49 @@
-const VARS_TO_GET_DAILY = "temperature_2m_max,temperature_2m_min,rain_sum,snowfall_sum,wind_speed_10m_max";
+const VARS_TO_GET_DAILY = "temperature_2m_max,temperature_2m_min,rain_sum,snowfall_sum,wind_speed_10m_max,sunshine_duration";
+const FRIENDLY_NAMES = {
+    "temperature_2m_max": {
+        "name": "Max Temp",
+        "lower": "colder",
+        "higher": "hotter",
+        "metric": "&#186;C",
+        "imperial": " F"
+    },
+    "temperature_2m_min": {
+        "name": "Min Temp",
+        "lower": "colder",
+        "higher": "hotter",
+        "metric": "&#186;C",
+        "imperial": " F"
+    },
+    "rain_sum": {
+        "name": "Rain",
+        "lower": "drier",
+        "higher": "wetter",
+        "metric": " mm",
+        "imperial": " inch"
+    },
+    "snowfall_sum": {
+        "name": "Snow",
+        "lower": "less snowy",
+        "higher": "snowier",
+        "metric": " mm",
+        "imperial": " inch"
+    },
+    "wind_speed_10m_max": {
+        "name": "Wind",
+        "lower": "calmer",
+        "higher": "windier",
+        "metric": " km/h",
+        "imperial": " mph",
+    }, 
+    "sunshine_duration": {
+        "name": "Sunshine",
+        "lower": "less sunny",
+        "higher": "sunnier",
+        "metric": " hours",
+        "imperial": " hours",
+    },
+}
+
 const VARS_TO_GET_HOURLY = "";
 const METRIC="";
 const IMPERIAL="temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
@@ -73,6 +118,7 @@ async function geocode(){
 
 async function getWeather(){
     document.getElementById("chart").innerHTML = "Loading...";
+    document.getElementById("summary").innerHTML = "";
     if (document.getElementById("location").value != "") {
         document.getElementById("latitude").value = "";
         document.getElementById("longitude").value = "";
@@ -133,9 +179,11 @@ async function getWeather(){
     
     let currentVal = getCurrentValue(current, date);
     document.getElementById('chart').innerHTML = "";
+    document.getElementById('summary').innerHTML = "";
     for (const varName of varsToGetDaily) {
         let chart = createAsciiChart(varName, gg[varName], currentVal[varName], date, historical_grouped[varName]);
         document.getElementById('chart').innerHTML += chart;
+        document.getElementById('summary').innerHTML += friendlyStats(historical_grouped[varName], currentVal[varName], varName, units) + "<br>";
     }
 }
 
@@ -146,18 +194,22 @@ function parseDate(dateString) {
 }
 
 function findPercentileForValue(data, value) {
-    // find closest value in data
-    const index = data.findIndex((x) => x >= value);
-    if (index === -1) {
-        if (value < data[0]) {
-            return 0;
-        }
+    // find first index greater than value
+    var firstIndex = data.findIndex((x) => x >= value);
+    var lastIndex = data.findIndex((x) => x > value);
 
-        if (value > data[data.length - 1]) {
-            return 1;
-        }
+    if (firstIndex === -1 && lastIndex === -1) {
+        return [1, firstIndex, lastIndex];
     }
-    return index / data.length;
+    if (firstIndex === -1) {
+        return [0, firstIndex, lastIndex];
+    }
+    if (lastIndex === -1) {
+        return [1, firstIndex, lastIndex];
+    }
+    const percentile = (firstIndex+lastIndex) / 2 / data.length;
+    return [percentile, firstIndex, lastIndex];
+
 }
 
 function getPercentile(data, percentile) {
@@ -191,17 +243,73 @@ function maxValuesToValues(maxValues) {
     return values;
 }
 
-function printStats(data, current_value) {
+function friendlyStats(data, current_value, var_name, unit_type) {
+    var friendly_name = FRIENDLY_NAMES[var_name]["name"];
     data = data.sort((a, b) => parseFloat(a) - parseFloat(b));
-    const mean = getMean(data);
-    const std = getStd(data);
-    const median = getMedian(data);
-    const p5 = getPercentile(data, 0.05);
-    const p25 = getPercentile(data, 0.25);
-    const p75 = getPercentile(data, 0.75);
-    const p95 = getPercentile(data, 0.95);
+    var mean = getMean(data);
+    var median = getMedian(data);
     const percentile = findPercentileForValue(data, current_value);
-    return `mean: ${mean.toFixed(2)}, std: ${std.toFixed(2)}, 5%: ${p5.toFixed(2)}, 25%: ${p25.toFixed(2)}, 50%: ${median.toFixed(2)}, 75%: ${p75.toFixed(2)}, 95%: ${p95.toFixed(2)}<br>current value: ${current_value.toFixed(2)}, percentile: ${percentile.toFixed(2)}`;
+    if (var_name === "sunshine_duration") {
+        mean = mean / 3600;
+        median = median / 3600;
+        current_value = current_value / 3600;
+    }
+    var qualifier = "";
+    var boldStart = "";
+    var boldEnd = "";
+    if (percentile[1] == 0 && percentile[2] == -1) {
+        return `${friendly_name}: ${current_value.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}. Not expected this time of year.`;
+    } else if (percentile[0] == 0) {
+        qualifier = "minimum value recorded for the time period, median";
+        boldStart = "<b style='color:blue'>";
+        boldEnd = "</b>";
+    } else if (percentile[0] == 1) {
+        qualifier = "maximum value recorded for the time period, median";
+        boldStart = "<b style='color:red'>";
+        boldEnd = "</b>";  
+    } else if (percentile[0] < 0.05) {
+        qualifier = "much " + FRIENDLY_NAMES[var_name]["lower"] + " than median"
+        boldStart = "<b>";
+        boldEnd = "</b>";
+    } else if (percentile[0] > 0.95) {
+        qualifier = "much " + FRIENDLY_NAMES[var_name]["higher"] + " than median"
+        boldStart = "<b>";
+        boldEnd = "</b>";
+    } else if (percentile[0] < 0.25) {
+        qualifier = FRIENDLY_NAMES[var_name]["lower"] + " than median";
+        boldStart = "<b>";
+        boldEnd = "</b>";
+    } else if (percentile[0] > 0.75) {
+        qualifier = FRIENDLY_NAMES[var_name]["higher"] + " than median";
+        boldStart = "<b>";
+        boldEnd = "</b>";
+    }  else {
+        qualifier = "close to median";
+    }
+    return `${boldStart}${friendly_name}: ${current_value.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} (${median.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}) and average (${mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}), percentile: ${percentile[0].toFixed(2)}${boldEnd}`;
+    
+}
+
+function printStats(data, current_value, var_name) {
+    data = data.sort((a, b) => parseFloat(a) - parseFloat(b));
+    var mean = getMean(data);
+    var std = getStd(data);
+    var median = getMedian(data);
+    var p5 = getPercentile(data, 0.05);
+    var p25 = getPercentile(data, 0.25);
+    var p75 = getPercentile(data, 0.75);
+    var p95 = getPercentile(data, 0.95);
+    var percentile = findPercentileForValue(data, current_value);
+    if (var_name === "sunshine_duration") {
+        mean = mean / 3600;
+        median = median / 3600;
+        p5 = p5 / 3600;
+        p25 = p25 / 3600;
+        p75 = p75 / 3600;
+        p95 = p95 / 3600;
+        current_value = current_value / 3600;
+    }
+    return `mean: ${mean.toFixed(2)}, std: ${std.toFixed(2)}, 5%: ${p5.toFixed(2)}, 25%: ${p25.toFixed(2)}, 50%: ${median.toFixed(2)}, 75%: ${p75.toFixed(2)}, 95%: ${p95.toFixed(2)}<br>current value: ${current_value.toFixed(2)}, percentile: ${percentile[0].toFixed(2)}`;
 }
 
 async function getCurrentWeather(location = DEFAULT_LOCATION, current_date = new Date(), delta = DEFAULT_DELTA, unitsType = "metric") {
@@ -388,9 +496,12 @@ function createHistogram(datas, current_date = null) {
             var vars = VARS_TO_GET_DAILY.split(",");
             for (var k = 0; k < vars.length; k++) {
                 var varName = vars[k] + "";
+                var val = data["daily"][varName][j];
+                if (varName === "sunshine_duration") {
+                    val = val / 3600;
+                }
+                val = Math.round(val) + "";
                 if (current_date && day == current_date.toISOString().slice(0, 10)) {
-                    var val = data["daily"][varName][j];
-                    val = Math.round(val) + "";
                     if (!(varName in currentData)) {
                         currentData[varName] = {};
                     }
@@ -400,8 +511,6 @@ function createHistogram(datas, current_date = null) {
                         perValue[varName] = {};
                     }
                     if (varName in data["daily"]) {
-                        var val = data["daily"][varName][j];
-                        val = Math.round(val) + "";
                         if (!(val in perValue[varName])) {
                             perValue[varName][val] = [];
                         }
@@ -525,7 +634,7 @@ function createAsciiChart(name, groupedData, currentVal, currentDate, historical
         line += SEPARATOR.repeat(COLUMN_WIDTH-varValueString.length) + varValueString;
     }
     line += "<br>";
-    const stats = printStats(historical_grouped, currentVal);
+    const stats = printStats(historical_grouped, currentVal, name);
     return `${asciiTable}${line}${name}<br>${stats}<br></br>`;
 }
 
