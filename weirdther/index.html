@@ -23,7 +23,11 @@
     <label for="years_to_get_history">Years of History:</label>
     <input type="number" id="years_to_get_history" value="24">
 
-    <label for="years_to_get_forecast">Years of Forecast:</label>
+    <label for="units">Units:</label>
+    <select id="units" value="metric">
+        <option value="metric">Metric</option>
+        <option value="imperial">Imperial</option>
+    </select>
 
     <button onclick="getWeather()">Get Weather</button>
 

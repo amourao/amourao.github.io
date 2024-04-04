@@ -1,5 +1,7 @@
-const VARS_TO_GET_DAILY = "temperature_2m_max,temperature_2m_min,rain_sum,snowfall_sum";
+const VARS_TO_GET_DAILY = "temperature_2m_max,temperature_2m_min,rain_sum,snowfall_sum,wind_speed_10m_max";
 const VARS_TO_GET_HOURLY = "";
+const METRIC="";
+const IMPERIAL="temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
 
 const DATA_PATH = "data";
 const SEPARATOR = "&nbsp;";
@@ -91,6 +93,9 @@ async function getWeather(){
     const delta = document.getElementById("delta").value;
     const years_to_get_history = document.getElementById("years_to_get_history").value;
 
+    const units = document.getElementById("units").value;
+
+
     const current_date = new Date();
     // today or yesterday
     let current = null;
@@ -104,19 +109,19 @@ async function getWeather(){
         document.getElementById('chart').innerHTML = "Date too far in the future";
         return;
     } else if (date.toISOString().slice(0, 10) >= current_date.toISOString().slice(0, 10)) {
-        current = await getCurrentWeather([latitude, longitude], date, delta);
+        current = await getCurrentWeather([latitude, longitude], date, delta, units)
     } else if (date > delta_starts) {
         // delta is in days
-        currentA = await getCurrentWeather([latitude, longitude], date, delta);
-        currentB = await getHistoricalWeatherCurrent([latitude, longitude], date, delta);
+        currentA = await getCurrentWeather([latitude, longitude], date, delta, units);
+        currentB = await getHistoricalWeatherCurrent([latitude, longitude], date, delta, units);
         current = mergeCurrentHistorical(currentA, currentB, delta_starts.toISOString().slice(0, 10), delta_ends.toISOString().slice(0, 10));
     } else {
-        current = await getHistoricalWeatherCurrent([latitude, longitude], date, delta);
+        current = await getHistoricalWeatherCurrent([latitude, longitude], date, delta, units);
     }
     const parsedData = splitPastPresentFuture(current, date);
     current = parsedData;
 
-    const historical = await getHistoricalWeather([latitude, longitude], date, delta, years_to_get_history);
+    const historical = await getHistoricalWeather([latitude, longitude], date, delta, years_to_get_history, units);
     const historical_grouped = groupByValue(historical);
     const historical_histogram = createHistogram(historical);
     const current_histograms = [...historical_histogram];
@@ -199,15 +204,22 @@ function printStats(data, current_value) {
     return `mean: ${mean.toFixed(2)}, std: ${std.toFixed(2)}, 5%: ${p5.toFixed(2)}, 25%: ${p25.toFixed(2)}, 50%: ${median.toFixed(2)}, 75%: ${p75.toFixed(2)}, 95%: ${p95.toFixed(2)}<br>current value: ${current_value.toFixed(2)}, percentile: ${percentile.toFixed(2)}`;
 }
 
-async function getCurrentWeather(location = DEFAULT_LOCATION, current_date = new Date(), delta = DEFAULT_DELTA) {
+async function getCurrentWeather(location = DEFAULT_LOCATION, current_date = new Date(), delta = DEFAULT_DELTA, unitsType = "metric") {
     // format location to three decimal places
+    var unitString = METRIC
+    if (unitsType === "imperial") {
+        unitString = IMPERIAL
+    }
+
     location = [location[0].toFixed(2), location[1].toFixed(2)];
-    const key = `current-${current_date.toISOString().split('T')[0]}-${delta}-${location[0]}-${location[1]}`;
-    //const storedData = localStorage.getItem(key);
-    //if (storedData) {
-    //    return JSON.parse(storedData);
-    //}
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${location[0]}&longitude=${location[1]}&current=${VARS_TO_GET_HOURLY}&daily=${VARS_TO_GET_DAILY}&past_days=${delta}`;
+    const key = `current-${current_date.toISOString().split('T')[0]}-${delta}-${location[0]}-${location[1]}-${unitsType}`;
+    const storedData = localStorage.getItem(key);
+    if (storedData) {
+        return JSON.parse(storedData);
+    }
+
+
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${location[0]}&longitude=${location[1]}&current=${VARS_TO_GET_HOURLY}&daily=${VARS_TO_GET_DAILY}&past_days=${delta}&${unitString}`;
     const response = await fetch(url);
     const data = await response.json();
     
@@ -238,8 +250,13 @@ function splitPastPresentFuture(data, current_date) {
     return daily;
 }
 
-async function getHistoricalWeatherCurrent(location, current_date = new Date(), delta = DEFAULT_DELTA) {
+async function getHistoricalWeatherCurrent(location, current_date = new Date(), delta = DEFAULT_DELTA, unitsType = "metric") {
     // format location to two decimal places
+    var unitString = METRIC
+    if (unitsType === "imperial") {
+        unitString = IMPERIAL
+    }
+
     location = [location[0].toFixed(2), location[1].toFixed(2)];
 
     const start = new Date(current_date.getTime() - delta * 24 * 60 * 60 * 1000);
@@ -247,12 +264,12 @@ async function getHistoricalWeatherCurrent(location, current_date = new Date(), 
     if (end > new Date()) {
         end = new Date();
     }
-    const key = `historical-current-${start.toISOString().split('T')[0]}-${end.toISOString().split('T')[0]}-${location[0]}-${location[1]}.json`;
+    const key = `historical-current-${start.toISOString().split('T')[0]}-${end.toISOString().split('T')[0]}-${location[0]}-${location[1]}-${unitsType}.json`;
     const storedData = localStorage.getItem(key);
     if (storedData) {
         return JSON.parse(storedData);
     }
-    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location[0]}&longitude=${location[1]}&start_date=${start.toISOString().split('T')[0]}&end_date=${end.toISOString().split('T')[0]}&daily=${VARS_TO_GET_DAILY}`;
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location[0]}&longitude=${location[1]}&start_date=${start.toISOString().split('T')[0]}&end_date=${end.toISOString().split('T')[0]}&daily=${VARS_TO_GET_DAILY}&${unitString}`;
 
     const response = await fetch(url);
     const data = await response.json();
@@ -261,8 +278,13 @@ async function getHistoricalWeatherCurrent(location, current_date = new Date(), 
 }
 
 
-async function getHistoricalWeather(location, current_date = new Date(), delta = DEFAULT_DELTA, years = DEFAULT_YEARS_TO_GET_HISTORY) {
+async function getHistoricalWeather(location, current_date = new Date(), delta = DEFAULT_DELTA, years = DEFAULT_YEARS_TO_GET_HISTORY, unitsType = "metric") {
     // format location to two decimal places
+    var unitString = METRIC
+    if (unitsType === "imperial") {
+        unitString = IMPERIAL
+    }
+
     location = [location[0].toFixed(2), location[1].toFixed(2)];
     const datas = [];
     var current_date_to = new Date(current_date);
@@ -274,13 +296,13 @@ async function getHistoricalWeather(location, current_date = new Date(), delta =
         }
         const start = new Date(current_date_to.getTime() - delta * 24 * 60 * 60 * 1000);
         const end = new Date(current_date_to.getTime() + delta * 24 * 60 * 60 * 1000);
-        const key = `historical-${start.toISOString().split('T')[0]}-${end.toISOString().split('T')[0]}-${location[0]}-${location[1]}.json`;
+        const key = `historical-${start.toISOString().split('T')[0]}-${end.toISOString().split('T')[0]}-${location[0]}-${location[1]}-${unitsType}.json`;
         const storedData = localStorage.getItem(key);
         if (storedData) {
             datas.push(JSON.parse(storedData));
             continue;
         }
-        const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location[0]}&longitude=${location[1]}&start_date=${start.toISOString().split('T')[0]}&end_date=${end.toISOString().split('T')[0]}&daily=${VARS_TO_GET_DAILY}`;
+        const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location[0]}&longitude=${location[1]}&start_date=${start.toISOString().split('T')[0]}&end_date=${end.toISOString().split('T')[0]}&daily=${VARS_TO_GET_DAILY}&${unitString}`;
         const response = await fetch(url);
         const data = await response.json();
         localStorage.setItem(key, JSON.stringify(data));
