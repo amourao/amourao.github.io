@@ -3,8 +3,8 @@ const VARS_TO_GET_HOURLY = "";
 
 const DATA_PATH = "data";
 const SEPARATOR = "&nbsp;";
-const COLORS = ["gray", "blue", "red"];
-const SYMBOLS_RAW = ["#", "%", "@"];
+const COLORS = ["gray", "#004074", "red" /*"#00c0b1"*/, "#00c0b1"];
+const SYMBOLS_RAW = ["#", "P", "#", "F"];
 // zip colors and symbols
 const SYMBOLS = SYMBOLS_RAW.map((x, i) => `<font title='%%%' color='${COLORS[i]}'>${x}</font>`);
 const COLUMN_WIDTH = 3;
@@ -13,7 +13,32 @@ const COLUMN_WIDTH = 3;
 window.onload = function() {
     // catch exceptions
     document.getElementById("date").value = new Date().toISOString().slice(0, 10);
-    if (navigator.geolocation) {
+    // parse GET parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const latitude = urlParams.get('latitude');
+    const longitude = urlParams.get('longitude');
+    const location = urlParams.get('location');
+    const date = urlParams.get('date');
+    const delta = urlParams.get('delta');
+    const years_to_get_history = urlParams.get('years_to_get_history');
+    if (latitude && longitude) {
+        document.getElementById("latitude").value = latitude;
+        document.getElementById("longitude").value = longitude;
+    }
+    if (location) {
+        document.getElementById("location").value = location;
+    }
+    if (date) {
+        document.getElementById("date").value = date;
+    }
+    if (delta) {
+        document.getElementById("delta").value = delta;
+    }
+    if (years_to_get_history) {
+        document.getElementById("years_to_get_history").value = years_to_get_history;
+    }
+
+    if (((!latitude || !longitude)  && !location) && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(function(position) {
             console.log(position);
             document.getElementById("latitude").value = position.coords.latitude.toFixed(2);
@@ -21,6 +46,7 @@ window.onload = function() {
             getWeather();
         });
     }
+    getWeather();
 }
 
 window.onerror = function (msg, url, lineNo, columnNo, error) {
@@ -39,7 +65,7 @@ async function geocode(){
         let result = data["results"][0]
         document.getElementById("latitude").value = result.latitude.toFixed(2);
         document.getElementById("longitude").value = result.longitude.toFixed(2);
-        document.getElementById("location").value = result.name + ", " + result.admin1 + ", " + result.country;
+        document.getElementById("location").value = result.name
     }
 }
 
@@ -87,12 +113,17 @@ async function getWeather(){
     } else {
         current = await getHistoricalWeatherCurrent([latitude, longitude], date, delta);
     }
+    const parsedData = splitPastPresentFuture(current, date);
+    current = parsedData;
 
     const historical = await getHistoricalWeather([latitude, longitude], date, delta, years_to_get_history);
     const historical_grouped = groupByValue(historical);
     const historical_histogram = createHistogram(historical);
-    const current_histogram = createHistogram([current], date);
-    const gg = groupHistogramsByValue([...historical_histogram, ...current_histogram]);
+    const current_histograms = [...historical_histogram];
+    for (var i = 0; i < current.length; i++) {
+        current_histograms.push(...createHistogram([current[i]]));
+    }
+    const gg = groupHistogramsByValue(current_histograms);
     const varsToGetDaily = VARS_TO_GET_DAILY.split(",");
     
     let currentVal = getCurrentValue(current, date);
@@ -172,15 +203,39 @@ async function getCurrentWeather(location = DEFAULT_LOCATION, current_date = new
     // format location to three decimal places
     location = [location[0].toFixed(2), location[1].toFixed(2)];
     const key = `current-${current_date.toISOString().split('T')[0]}-${delta}-${location[0]}-${location[1]}`;
-    const storedData = localStorage.getItem(key);
-    if (storedData) {
-        return JSON.parse(storedData);
-    }
+    //const storedData = localStorage.getItem(key);
+    //if (storedData) {
+    //    return JSON.parse(storedData);
+    //}
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${location[0]}&longitude=${location[1]}&current=${VARS_TO_GET_HOURLY}&daily=${VARS_TO_GET_DAILY}&past_days=${delta}`;
     const response = await fetch(url);
     const data = await response.json();
+    
     localStorage.setItem(key, JSON.stringify(data));
     return data;
+}
+
+function splitPastPresentFuture(data, current_date) {
+    var daily = [{"daily": {}}, {"daily": {}}, {"daily": {}}];
+    var vars = ("time," + VARS_TO_GET_DAILY).split(",");
+    for (var k = 0; k < vars.length; k++) {
+        var varName = vars[k] + "";
+        for (var i = 0; i < daily.length; i++) {
+            daily[i]["daily"][varName] = [];
+        }
+        for (var i = 0; i < data["daily"]["time"].length; i++) {
+            var day = data["daily"]["time"][i];
+            var today = current_date.toISOString().split('T')[0];
+            if (day === today) {
+                daily[1]["daily"][varName].push(data["daily"][varName][i]);
+            } else if (today > day) {
+                daily[0]["daily"][varName].push(data["daily"][varName][i]);
+            } else {
+                daily[2]["daily"][varName].push(data["daily"][varName][i]);
+            }
+        }
+    }
+    return daily;
 }
 
 async function getHistoricalWeatherCurrent(location, current_date = new Date(), delta = DEFAULT_DELTA) {
@@ -334,13 +389,7 @@ function createHistogram(datas, current_date = null) {
             }
         }
     }
-
-
-    if (!current_date) {
-        return [perValue];
-    } else {
-        return [perValue, currentData];
-    }
+    return [perValue];
 }
 
 function groupHistogramsByValue(datas) {
@@ -408,15 +457,10 @@ function createAsciiChart(name, groupedData, currentVal, currentDate, historical
         for (var j = 0; j < varValues.length; j++) {
             internalMax += varValues[j].length;
             // repeat symbol into array
-            if (varValues[j][0] === currentDate.toISOString().slice(0, 10)) {
-                Array(varValues[j].length).fill(SYMBOLS[SYMBOLS.length - 1]).forEach(function (x) { 
-                    symbols[sortedHistoricalDataKeys[i]].push(x);
-                });
-            } else {
-                Array(varValues[j].length).fill(SYMBOLS[j % SYMBOLS.length]).forEach(function (x) { 
-                    symbols[sortedHistoricalDataKeys[i]].push(x);
-                });
-            }
+            Array(varValues[j].length).fill(SYMBOLS[j % SYMBOLS.length]).forEach(function (x) { 
+                symbols[sortedHistoricalDataKeys[i]].push(x);
+            });
+            
             for (var k = 0; k < varValues[j].length; k++) {
                 values[sortedHistoricalDataKeys[i]].push(varValues[j][k]);
             }
@@ -466,9 +510,14 @@ function createAsciiChart(name, groupedData, currentVal, currentDate, historical
 function getCurrentValue(current, currentDate) {
     // get current value
     let currentVal = {};
-    for (var varName in VARS_TO_GET_DAILY.split(",")) {
-        varName = VARS_TO_GET_DAILY.split(",")[varName];
-        currentVal[varName] = current["daily"][varName][current["daily"]["time"].indexOf(currentDate.toISOString().slice(0, 10))];
+    for (var i = 0; i < current.length; i++) {
+        var index = current[i]["daily"]["time"].indexOf(currentDate.toISOString().slice(0, 10))
+        if (index !== -1) {
+            for (var varName in VARS_TO_GET_DAILY.split(",")) {
+                varName = VARS_TO_GET_DAILY.split(",")[varName];
+                currentVal[varName] = current[i]["daily"][varName][index];
+            }
+        }
     }
     return currentVal;
 }
