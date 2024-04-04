@@ -141,6 +141,17 @@ async function getWeather(){
 
     const units = document.getElementById("units").value;
 
+    // update URL
+    const url = new URL(window.location.href);
+    url.searchParams.set('latitude', latitude);
+    url.searchParams.set('longitude', longitude);
+    url.searchParams.set('location', document.getElementById("location").value);
+    url.searchParams.set('date', dateString);
+    url.searchParams.set('delta', delta);
+    url.searchParams.set('years_to_get_history', years_to_get_history);
+    window.history.pushState({}, '', url);
+
+
 
     const current_date = new Date();
     // today or yesterday
