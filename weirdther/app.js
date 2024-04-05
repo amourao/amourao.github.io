@@ -198,7 +198,11 @@ async function getWeather(){
     }
 
     for (const info of [["Selected day",1], ["Past weather",0], ["Forecast",2]]) {
-        document.getElementById('summary').innerHTML += "<br>" + info[0] + ":<br>";
+        var days = current[info[1]]["daily"]["time"][0].replaceAll("-", "/");
+        if (current[info[1]]["daily"]["time"].length > 1) {
+            days += "-" + current[info[1]]["daily"]["time"][current[info[1]]["daily"]["time"].length-1].replaceAll("-", "/");
+        }
+        document.getElementById('summary').innerHTML += "<b>" + info[0] + ":</b> " + days + "<br>";
         let score = 0;
         let scoreSum = 0;
         var text = "";
@@ -208,7 +212,7 @@ async function getWeather(){
             score += datas[1];
             scoreSum += datas[2];
         }
-        document.getElementById('summary').innerHTML += "<b>Weirdther Score: " + (score/scoreSum*100).toFixed(0) + "</b><ul>" + text + "</ul>";
+        document.getElementById('summary').innerHTML += "<b>Weirdther Score:</b> " + (score/scoreSum*100).toFixed(0) + "<ul>" + text + "</ul>";
     }
 }
 
