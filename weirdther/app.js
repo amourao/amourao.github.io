@@ -193,24 +193,53 @@ async function getWeather(){
     document.getElementById('summary').innerHTML = "";
 
     document.getElementById('summary').innerHTML += "Current weather:<br>";
+
+    let score = 0;
+    let scoreSum = 0;
+    var text = "";
     for (const varName of varsToGetDaily) {
         let chart = createAsciiChart(varName, gg[varName], currentVal[varName], date, historical_grouped[varName]);
         document.getElementById('chart').innerHTML += chart;
-        document.getElementById('summary').innerHTML += friendlyStats(historical_grouped[varName], current[1]["daily"][varName], varName, units) + "<br>";
+        const datas = friendlyStats(historical_grouped[varName], current[1]["daily"][varName], varName, units);
+        text += datas[0] + "<br>";
+        score += datas[1];
+        scoreSum += datas[2];
     }
+    document.getElementById('summary').innerHTML += "<b>Weirdther Score: " + (score/scoreSum*100).toFixed(0) + "</b><br><br>" + text;
+    score = 0;
+    scoreSum = 0;
+    text = "";
+
     document.getElementById('summary').innerHTML += "<br>Past weather:<br>";
 
     for (const varName of varsToGetDaily) {
-        document.getElementById('summary').innerHTML += friendlyStats(historical_grouped[varName], current[0]["daily"][varName], varName, units) + "<br>";
+        const datas = friendlyStats(historical_grouped[varName], current[0]["daily"][varName], varName, units);
+        text += datas[0] + "<br>";
+        score += datas[1];
+        scoreSum += datas[2];
     }
+
+    document.getElementById('summary').innerHTML += "<b>Weirdther Score: " + (score/scoreSum*100).toFixed(0) + "</b><br><br>" + text;
+    score = 0;
+    scoreSum = 0;
+    text = "";
+
     document.getElementById('summary').innerHTML += "<br>Forecast:<br>";
 
     for (const varName of varsToGetDaily) {
-        document.getElementById('summary').innerHTML += friendlyStats(historical_grouped[varName], current[2]["daily"][varName], varName, units) + "<br>";
+        const datas = friendlyStats(historical_grouped[varName], current[2]["daily"][varName], varName, units);
+        text += datas[0] + "<br>";
+        score += datas[1];
+        scoreSum += datas[2];
     }
-    document.getElementById('summary').innerHTML += "<br>";
 
+    document.getElementById('summary').innerHTML += "<b>Weirdther Score: " + (score/scoreSum*100).toFixed(0) + "</b><br><br>" + text;
+    score = 0;
+    scoreSum = 0;
+    
+    document.getElementById('summary').innerHTML += "<br>";
 }
+
 
 
 function parseDate(dateString) {
@@ -230,7 +259,7 @@ function findPercentileForValue(data, value) {
         return [0, firstIndex, lastIndex];
     }
     if (lastIndex === -1) {
-        return [1, firstIndex, lastIndex];
+        return [0.5, firstIndex, lastIndex];
     }
     const percentile = (firstIndex+lastIndex) / 2 / data.length;
     return [percentile, firstIndex, lastIndex];
@@ -276,11 +305,14 @@ function friendlyStats(data, current_series, var_name, unit_type) {
     var series_percentile = [0, 0, 0]
     var series_mean = getMean(current_series);
     var series_median = getMedian(current_series);
+    var score = 0, scoreSum = 0;
     for (var i = 0; i < current_series.length; i++) {
         const percentileData = findPercentileForValue(data, current_series[i]);
         series_percentile[0] += percentileData[0];
         series_percentile[1] += percentileData[1];
         series_percentile[2] += percentileData[2];
+        score += Math.abs(percentileData[0] - 0.5)*2;
+        scoreSum += 1;
     }
     series_percentile[0] /= current_series.length;
     series_percentile[1] /= current_series.length;
@@ -296,7 +328,7 @@ function friendlyStats(data, current_series, var_name, unit_type) {
     var boldStart = "";
     var boldEnd = "";
     if (series_percentile[1] == 0 && series_percentile[2] == -1) {
-        return `${friendly_name}: ${series_mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}. Not expected this time of year.`;
+        return [`${friendly_name}: ${series_mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}. Not expected this time of year.`, 0, 0];
     } else if (series_percentile[0] == 0) {
         qualifier = "minimum value recorded for the time period, median";
         boldStart = "<b style='color:blue'>";
@@ -324,7 +356,7 @@ function friendlyStats(data, current_series, var_name, unit_type) {
     }  else {
         qualifier = "close to median";
     }
-    return `${boldStart}${friendly_name}: ${series_mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} (${median.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}) and average (${mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}), percentile: ${series_percentile[0].toFixed(2)}${boldEnd}`;
+    return [`${boldStart}${friendly_name}: ${series_mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} (${median.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}) and average (${mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}), percentile: ${series_percentile[0].toFixed(2)}${boldEnd}`, score, scoreSum];
     
 }
 
