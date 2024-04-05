@@ -3,21 +3,21 @@ const FRIENDLY_NAMES = {
     "temperature_2m_max": {
         "name": "Max Temp",
         "lower": "colder",
-        "higher": "hotter",
+        "higher": "warmer",
         "metric": "&#186;C",
         "imperial": " F"
     },
     "temperature_2m_min": {
         "name": "Min Temp",
         "lower": "colder",
-        "higher": "hotter",
+        "higher": "warmer",
         "metric": "&#186;C",
         "imperial": " F"
     },
     "rain_sum": {
         "name": "Rain",
         "lower": "drier",
-        "higher": "wetter",
+        "higher": "rainier",
         "metric": " mm",
         "imperial": " inch"
     },
@@ -159,7 +159,7 @@ async function getWeather(){
     let delta_starts = new Date()
     delta_starts.setDate(new Date().getDate()-parseInt(delta));
     let delta_ends = new Date()
-    delta_ends.setDate(new Date().getDate()+parseInt(delta));
+    delta_ends.setDate(new Date().getDate()+parseInt(6));
 
     if (date > delta_ends) {
         // too far in the future
@@ -192,52 +192,24 @@ async function getWeather(){
     document.getElementById('chart').innerHTML = "";
     document.getElementById('summary').innerHTML = "";
 
-    document.getElementById('summary').innerHTML += "Current weather:<br>";
-
-    let score = 0;
-    let scoreSum = 0;
-    var text = "";
     for (const varName of varsToGetDaily) {
         let chart = createAsciiChart(varName, gg[varName], currentVal[varName], date, historical_grouped[varName]);
         document.getElementById('chart').innerHTML += chart;
-        const datas = friendlyStats(historical_grouped[varName], current[1]["daily"][varName], varName, units);
-        text += datas[0] + "<br>";
-        score += datas[1];
-        scoreSum += datas[2];
-    }
-    document.getElementById('summary').innerHTML += "<b>Weirdther Score: " + (score/scoreSum*100).toFixed(0) + "</b><br><br>" + text;
-    score = 0;
-    scoreSum = 0;
-    text = "";
-
-    document.getElementById('summary').innerHTML += "<br>Past weather:<br>";
-
-    for (const varName of varsToGetDaily) {
-        const datas = friendlyStats(historical_grouped[varName], current[0]["daily"][varName], varName, units);
-        text += datas[0] + "<br>";
-        score += datas[1];
-        scoreSum += datas[2];
     }
 
-    document.getElementById('summary').innerHTML += "<b>Weirdther Score: " + (score/scoreSum*100).toFixed(0) + "</b><br><br>" + text;
-    score = 0;
-    scoreSum = 0;
-    text = "";
-
-    document.getElementById('summary').innerHTML += "<br>Forecast:<br>";
-
-    for (const varName of varsToGetDaily) {
-        const datas = friendlyStats(historical_grouped[varName], current[2]["daily"][varName], varName, units);
-        text += datas[0] + "<br>";
-        score += datas[1];
-        scoreSum += datas[2];
+    for (const info of [["Selected day",1], ["Past weather",0], ["Forecast",2]]) {
+        document.getElementById('summary').innerHTML += "<br>" + info[0] + ":<br>";
+        let score = 0;
+        let scoreSum = 0;
+        var text = "";
+        for (const varName of varsToGetDaily) {
+            const datas = friendlyStats(historical_grouped[varName], current[info[1]]["daily"][varName], varName, units);
+            text += "<li>" + datas[0] + "</li>\n";
+            score += datas[1];
+            scoreSum += datas[2];
+        }
+        document.getElementById('summary').innerHTML += "<b>Weirdther Score: " + (score/scoreSum*100).toFixed(0) + "</b><ul>" + text + "</ul>";
     }
-
-    document.getElementById('summary').innerHTML += "<b>Weirdther Score: " + (score/scoreSum*100).toFixed(0) + "</b><br><br>" + text;
-    score = 0;
-    scoreSum = 0;
-    
-    document.getElementById('summary').innerHTML += "<br>";
 }
 
 
@@ -311,7 +283,13 @@ function friendlyStats(data, current_series, var_name, unit_type) {
         series_percentile[0] += percentileData[0];
         series_percentile[1] += percentileData[1];
         series_percentile[2] += percentileData[2];
-        score += Math.abs(percentileData[0] - 0.5)*2;
+        const diff = Math.abs(percentileData[0] - 0.5);
+         if (diff == 0.5) {
+            score += diff*3;
+        } else if (diff > 0.25) {
+            score += diff*2;
+        }
+
         scoreSum += 1;
     }
     series_percentile[0] /= current_series.length;
@@ -327,36 +305,44 @@ function friendlyStats(data, current_series, var_name, unit_type) {
     var qualifier = "";
     var boldStart = "";
     var boldEnd = "";
-    if (series_percentile[1] == 0 && series_percentile[2] == -1) {
-        return [`${friendly_name}: ${series_mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}. Not expected this time of year.`, 0, 0];
+    var topOrBottom = "";
+    var percentilePretty = `${(series_percentile[0]*100).toFixed(0)}%`;
+    if (series_mean === 0 && var_name === "rain_sum" && series_percentile[0] > 0.25 && series_percentile[0] < 0.75) {
+        return [`<b>${friendly_name}:</b> No rain expected, which is what is typical.`, 0, 0];
+    } else if (series_percentile[1] == 0 && series_percentile[2] == -1) {
+        return [`<b>${friendly_name}:</b> Not expected this time of year.`, 0, 0];
     } else if (series_percentile[0] == 0) {
-        qualifier = "minimum value recorded for the time period, median";
+        qualifier = "the minimum value recorded for the time period!";
         boldStart = "<b style='color:blue'>";
         boldEnd = "</b>";
     } else if (series_percentile[0] == 1) {
-        qualifier = "maximum value recorded for the time period, median";
+        qualifier = "the maximum value recorded for the time period!";
         boldStart = "<b style='color:red'>";
         boldEnd = "</b>";  
     } else if (series_percentile[0] < 0.05) {
-        qualifier = "much " + FRIENDLY_NAMES[var_name]["lower"] + " than median"
+        qualifier = "significantly " + FRIENDLY_NAMES[var_name]["lower"] + " than usual."
         boldStart = "<b>";
         boldEnd = "</b>";
+        topOrBottom = "Bottom " + percentilePretty;
     } else if (series_percentile[0] > 0.95) {
-        qualifier = "much " + FRIENDLY_NAMES[var_name]["higher"] + " than median"
+        qualifier = "significantly " + FRIENDLY_NAMES[var_name]["higher"] + " than usual."
         boldStart = "<b>";
         boldEnd = "</b>";
+        topOrBottom = "Top " + percentilePretty;
     } else if (series_percentile[0] < 0.25) {
-        qualifier = FRIENDLY_NAMES[var_name]["lower"] + " than median";
+        qualifier = FRIENDLY_NAMES[var_name]["lower"] + " than usual.";
         boldStart = "<b>";
         boldEnd = "</b>";
+        topOrBottom = "Bottom " + percentilePretty;
     } else if (series_percentile[0] > 0.75) {
-        qualifier = FRIENDLY_NAMES[var_name]["higher"] + " than median";
+        qualifier = FRIENDLY_NAMES[var_name]["higher"] + " than usual.";
         boldStart = "<b>";
         boldEnd = "</b>";
+        topOrBottom = "Top " + percentilePretty;
     }  else {
-        qualifier = "close to median";
+        qualifier = "close to what is expected.";
     }
-    return [`${boldStart}${friendly_name}: ${series_mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} (${median.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}) and average (${mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]}), percentile: ${series_percentile[0].toFixed(2)}${boldEnd}`, score, scoreSum];
+    return [`<b>${friendly_name}:</b> ${boldStart}${series_mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} Median ${median.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]} ${boldEnd}`, score, scoreSum];
     
 }
 
