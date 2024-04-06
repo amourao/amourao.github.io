@@ -281,6 +281,7 @@ function friendlyStats(data, current_series, var_name, unit_type) {
     var series_percentile = [0, 0, 0]
     var series_mean = getMean(current_series);
     var series_median = getMedian(current_series);
+    var series_min_max = [Math.min(...current_series), Math.max(...current_series)];
     var score = 0, scoreSum = 0;
     for (var i = 0; i < current_series.length; i++) {
         const percentileData = findPercentileForValue(data, current_series[i]);
@@ -305,7 +306,16 @@ function friendlyStats(data, current_series, var_name, unit_type) {
         median /= 3600;
         series_mean /= 3600;
         series_median /= 3600;
+        series_min_max[0] /= 3600;
+        series_min_max[1] /= 3600;
     }
+    console.log(series_min_max);
+    if (series_min_max[0] === series_min_max[1]) {
+        series_min_max = series_min_max[0].toFixed(2) + "";
+    } else {
+        series_min_max = series_min_max[0].toFixed(2) + "/" + series_mean.toFixed(2) + "/" + series_min_max[1].toFixed(2);
+    }
+
     var qualifier = "";
     var boldStart = "";
     var boldEnd = "";
@@ -346,7 +356,7 @@ function friendlyStats(data, current_series, var_name, unit_type) {
     }  else {
         qualifier = "close to what is expected.";
     }
-    return [`<b>${friendly_name}:</b> ${boldStart}${series_mean.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} Median ${median.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]} ${boldEnd}`, score, scoreSum];
+    return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} Historic median ${median.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]} ${boldEnd}`, score, scoreSum];
     
 }
 
