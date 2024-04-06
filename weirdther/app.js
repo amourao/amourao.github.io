@@ -53,8 +53,9 @@ const SEPARATOR = "&nbsp;";
 const COLORS = ["gray", "#004074", "red" /*"#00c0b1"*/, "#00c0b1"];
 const SYMBOLS_RAW = ["#", "P", "#", "F"];
 // zip colors and symbols
-const SYMBOLS = SYMBOLS_RAW.map((x, i) => `<font title='%%%' color='${COLORS[i]}'>${x}</font>`);
+const SYMBOLS = SYMBOLS_RAW.map((x, i) => `<a href='####'><font title='%%%' color='${COLORS[i]}'>${x}</font></a>`);
 const COLUMN_WIDTH = 3;
+var SELF_LINK = null;
 
 
 window.onload = function() {
@@ -152,6 +153,9 @@ async function getWeather(){
     window.history.pushState({}, '', url);
 
 
+    SELF_LINK = url;
+
+
 
     const current_date = new Date();
     // today or yesterday
@@ -197,7 +201,7 @@ async function getWeather(){
         document.getElementById('chart').innerHTML += chart;
     }
 
-    for (const info of [["Selected day",1], ["Past weather",0], ["Forecast",2]]) {
+    for (const info of [["Selected day",1], ["Days before",0], ["Days after",2]]) {
         var days = current[info[1]]["daily"]["time"][0].replaceAll("-", "/");
         if (current[info[1]]["daily"]["time"].length > 1) {
             days += "-" + current[info[1]]["daily"]["time"][current[info[1]]["daily"]["time"].length-1].replaceAll("-", "/");
@@ -338,9 +342,9 @@ function friendlyStats(data, current_series, var_name, unit_type) {
         series_min_max[1] /= 3600;
     }
     if (series_min_max[0] === series_min_max[1]) {
-        series_min_max = series_min_max[0].toFixed(2) + "";
+        series_min_max = series_min_max[0].toFixed(1) + "";
     } else {
-        series_min_max = series_min_max[0].toFixed(2) + "/" + series_mean.toFixed(2) + "/" + series_min_max[1].toFixed(2);
+        series_min_max = series_min_max[0].toFixed(1) + "/" + series_mean.toFixed(1) + "/" + series_min_max[1].toFixed(1);
     }
 
     var qualifier = "";
@@ -383,7 +387,7 @@ function friendlyStats(data, current_series, var_name, unit_type) {
     }  else {
         qualifier = "close to what is expected.";
     }
-    return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} Historic median ${median.toFixed(2)}${FRIENDLY_NAMES[var_name][unit_type]} ${boldEnd}`, scores, scoresSum];
+    return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} Historic median/mean ${median.toFixed(1)}/${mean.toFixed(1)}${FRIENDLY_NAMES[var_name][unit_type]} ${boldEnd}`, scores, scoresSum];
     
 }
 
@@ -710,7 +714,9 @@ function createAsciiChart(name, groupedData, currentVal, currentDate, historical
            
             if (i <= maxValues[varValues]) {
                 var value = values[varValues][i-1];
-                line += SEPARATOR.repeat(COLUMN_WIDTH-1) + symbols[varValues][i-1].replace("%%%", value);
+                var url = SELF_LINK
+                url.searchParams.set('date', value);
+                line += SEPARATOR.repeat(COLUMN_WIDTH-1) + symbols[varValues][i-1].replace("%%%", value).replace("###", url)
             } else {
                 line += SEPARATOR.repeat(COLUMN_WIDTH);
             }
