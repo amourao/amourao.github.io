@@ -248,7 +248,7 @@ async function getWeather(){
 
         const sorted = score.slice().sort((a, b) => a - b);
 
-        const mean = getMean(score) / 100;
+        const max = Math.max(...score);
 
         var scoreText = "";
 
@@ -261,11 +261,11 @@ async function getWeather(){
             scoreText += "-" + sorted[sorted.length-1].toFixed(0);
         }
 
-        if (mean < 0.5) {
+        if (max < 0.5) {
             scoreText += " (pretty normal)";
-        } else if (mean < 0.66) {
+        } else if (max < 0.7) {
             scoreText += " (a bit unusual)";
-        } else if (mean < 0.9) {
+        } else if (max < 0.9) {
             scoreText += " (elevator talk worthy)";
         } else {
             scoreText += " (live on TV weird)";
