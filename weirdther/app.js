@@ -72,6 +72,7 @@ window.onload = function() {
     if (latitude && longitude) {
         document.getElementById("latitude").value = latitude;
         document.getElementById("longitude").value = longitude;
+        document.getElementById("location").value = "Using coordinates";
     }
     if (location) {
         document.getElementById("location").value = location;
@@ -91,9 +92,11 @@ window.onload = function() {
             console.log(position);
             document.getElementById("latitude").value = position.coords.latitude.toFixed(2);
             document.getElementById("longitude").value = position.coords.longitude.toFixed(2);
+            document.getElementById("location").value = "Current location";
             getWeather();
         });
     }
+    
     getWeather();
 }
 
@@ -109,30 +112,46 @@ async function geocode(){
     const url = `https://geocoding-api.open-meteo.com/v1/search?name=${location}&count=10&format=json`
     const response = await fetch(url);
     const data = await response.json();
-    if (data["results"].length > 0) {
+    if (data && data["results"] && data["results"].length > 0) {
         let result = data["results"][0]
         document.getElementById("latitude").value = result.latitude.toFixed(2);
         document.getElementById("longitude").value = result.longitude.toFixed(2);
-        document.getElementById("location").value = result.name
+        document.getElementById("geocode_result").innerHTML = result.name + ", " + result.admin2 + ", " + result.admin1 + ", " + result.country;  
     }
 }
 
 async function getWeather(){
-    document.getElementById("chart").innerHTML = "Loading...";
-    document.getElementById("summary").innerHTML = "";
-    if (document.getElementById("location").value != "") {
+    document.getElementById("summary").innerHTML = "Loading...";
+    document.getElementById("chart").innerHTML = "";
+    if (document.getElementById("location").value != "" &&
+        document.getElementById("location").value != "Current location" &&
+        document.getElementById("location").value != "Using coordinates") {
         document.getElementById("latitude").value = "";
         document.getElementById("longitude").value = "";
         await geocode();
     }
     
     if (document.getElementById("latitude").value == "" || document.getElementById("longitude").value == "") {
-        document.getElementById("chart").innerHTML = "Location not found";
+        document.getElementById("summary").innerHTML = "Location not found";
         return;
     }
 
     const latitude = parseFloat(document.getElementById("latitude").value);
     const longitude = parseFloat(document.getElementById("longitude").value);
+
+    if (document.getElementById("location").value == "") {
+        document.getElementById("location").value = "Using coordinates";
+        document.getElementById("geocode_result").innerHTML = latitude + ", " + longitude;
+    }
+
+    if (document.getElementById("location").value == "Current location") {
+        document.getElementById("location").value = "Current location";
+        document.getElementById("geocode_result").innerHTML = "Current location (" + latitude + ", " + longitude + ")";
+    }
+
+    if (document.getElementById("location").value == "Using coordinates") {
+        document.getElementById("geocode_result").innerHTML = latitude + ", " + longitude;
+    }
 
     const dateString = document.getElementById("date").value;
     // parse YYYY-MM-DD to Date object
