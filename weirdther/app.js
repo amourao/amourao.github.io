@@ -161,11 +161,15 @@ async function getWeather(){
 
     const units = document.getElementById("units").value;
 
+    const location = document.getElementById("location").value;
+
     // update URL
     const url = new URL(window.location.href);
     url.searchParams.set('latitude', latitude);
     url.searchParams.set('longitude', longitude);
-    url.searchParams.set('location', document.getElementById("location").value);
+    if (location != "Using coordinates" && location != "Current location") {
+        url.searchParams.set('location', document.getElementById("location").value);
+    }
     url.searchParams.set('date', dateString);
     url.searchParams.set('delta', delta);
     url.searchParams.set('years_to_get_history', years_to_get_history);
@@ -264,7 +268,7 @@ async function getWeather(){
         if (max < 0.5) {
             scoreText += " (what you signed up for)";
         } else if (max < 0.7) {
-            scoreText += " (gossip for garden gnomes)";
+            scoreText += " (elevator gossip worthy)";
         } else if (max < 0.9) {
             scoreText += " (watch live on your local news channel)";
         } else {
