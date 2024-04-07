@@ -5,9 +5,9 @@
     <script src="app.js"></script>
 </head>
 <body>
-    <form id="weatherForm" onsubmit=getWeather();>
+    <form id="weatherForm" onsubmit="event.preventDefault(); getWeather();">
         <label for="location">Location:</label>
-        <input type="text" id="location" name="location">
+        <input type="text" id="location">
 
         <label for="latitude">Latitude:</label>
         <input type="text" id="latitude">

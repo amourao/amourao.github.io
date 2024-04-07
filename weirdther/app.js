@@ -150,6 +150,7 @@ async function getWeather(){
     url.searchParams.set('date', dateString);
     url.searchParams.set('delta', delta);
     url.searchParams.set('years_to_get_history', years_to_get_history);
+    url.searchParams.set('units', units);
     window.history.pushState({}, '', url);
 
 
