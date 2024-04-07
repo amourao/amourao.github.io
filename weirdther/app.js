@@ -51,7 +51,7 @@ const IMPERIAL="temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_un
 const DATA_PATH = "data";
 const SEPARATOR = "&nbsp;";
 const COLORS = ["gray", "#004074", "red" /*"#00c0b1"*/, "#00c0b1"];
-const SYMBOLS_RAW = ["#", "P", "#", "F"];
+const SYMBOLS_RAW = ["#", "B", "S", "A"];
 // zip colors and symbols
 const SYMBOLS = SYMBOLS_RAW.map((x, i) => `<a href='####'><font title='%%%' color='${COLORS[i]}'>${x}</font></a>`);
 const COLUMN_WIDTH = 3;

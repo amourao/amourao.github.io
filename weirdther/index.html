@@ -5,31 +5,35 @@
     <script src="app.js"></script>
 </head>
 <body>
-    <label for="location">Location:</label>
-    <input type="text" id="location" name="location">
+    <form id="weatherForm" onsubmit=getWeather();>
+        <label for="location">Location:</label>
+        <input type="text" id="location" name="location">
 
-    <label for="latitude">Latitude:</label>
-    <input type="text" id="latitude">
+        <label for="latitude">Latitude:</label>
+        <input type="text" id="latitude">
 
-    <label for="longitude">Longitude:</label>
-    <input type="text" id="longitude">
+        <label for="longitude">Longitude:</label>
+        <input type="text" id="longitude">
 
-    <label for="date">Date:</label>
-    <input type="date" id="date">
+        <label for="date">Date:</label>
+        <input type="date" id="date">
 
-    <label for="delta">Delta (days):</label>
-    <input type="number" id="delta" value="5">
+        <label for="delta">Delta (days):</label>
+        <input type="number" id="delta" value="5">
 
-    <label for="years_to_get_history">Years of History:</label>
-    <input type="number" id="years_to_get_history" value="24">
+        <label for="years_to_get_history">Years of History:</label>
+        <input type="number" id="years_to_get_history" value="24">
 
-    <label for="units">Units:</label>
-    <select id="units" value="metric">
-        <option value="metric">Metric</option>
-        <option value="imperial">Imperial</option>
-    </select>
+        <label for="units">Units:</label>
+        <select id="units" value="metric">
+            <option value="metric">Metric</option>
+            <option value="imperial">Imperial</option>
+        </select>
 
-    <button onclick="getWeather()">Get Weather</button>
+        <input type="submit" value="Get Weather">
+
+    </form>
+
 
     <br>
     <br>
