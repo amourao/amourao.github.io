@@ -248,7 +248,7 @@ async function getWeather(){
 
         const sorted = score.slice().sort((a, b) => a - b);
 
-        const max = Math.max(...score);
+        const max = Math.max(...score) / 100;
 
         var scoreText = "";
 
@@ -268,7 +268,7 @@ async function getWeather(){
         } else if (max < 0.9) {
             scoreText += " (elevator talk worthy)";
         } else {
-            scoreText += " (live on TV weird)";
+            scoreText += " (live now on TV weird)";
         }
 
         document.getElementById('summary').innerHTML += "<b>Weirdther Score:</b> " + scoreText + "<ul>" + text + "</ul>";
