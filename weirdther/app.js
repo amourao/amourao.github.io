@@ -187,7 +187,7 @@ async function getWeather(){
 
     if (date > delta_ends) {
         // too far in the future
-        document.getElementById('chart').innerHTML = "Date too far in the future";
+        document.getElementById('summary').innerHTML = "Date too far in the future";
         return;
     } else if (date.toISOString().slice(0, 10) >= current_date.toISOString().slice(0, 10)) {
         current = await getCurrentWeather([latitude, longitude], date, delta, units)
@@ -248,6 +248,8 @@ async function getWeather(){
 
         const sorted = score.slice().sort((a, b) => a - b);
 
+        const mean = getMean(score) / 100;
+
         var scoreText = "";
 
         if (score.length == 1) {
@@ -258,6 +260,17 @@ async function getWeather(){
             scoreText = sorted[0].toFixed(0);
             scoreText += "-" + sorted[sorted.length-1].toFixed(0);
         }
+
+        if (mean < 0.5) {
+            scoreText += " (pretty normal)";
+        } else if (mean < 0.66) {
+            scoreText += " (a bit unusual)";
+        } else if (mean < 0.9) {
+            scoreText += " (elevator talk worthy)";
+        } else {
+            scoreText += " (live on TV weird)";
+        }
+
         document.getElementById('summary').innerHTML += "<b>Weirdther Score:</b> " + scoreText + "<ul>" + text + "</ul>";
     }
 }
