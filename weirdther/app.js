@@ -116,7 +116,7 @@ async function geocode(){
         let result = data["results"][0]
         document.getElementById("latitude").value = result.latitude.toFixed(2);
         document.getElementById("longitude").value = result.longitude.toFixed(2);
-        document.getElementById("geocode_result").innerHTML = result.name + ", " + result.admin2 + ", " + result.admin1 + ", " + result.country;  
+        document.getElementById("geocode_result").innerHTML = result.name + ", " + result.admin1 + ", " + result.country;  
     }
 }
 
@@ -262,13 +262,13 @@ async function getWeather(){
         }
 
         if (max < 0.5) {
-            scoreText += " (pretty normal)";
+            scoreText += " (what you signed up for)";
         } else if (max < 0.7) {
-            scoreText += " (a bit unusual)";
+            scoreText += " (gossip for garden gnomes)";
         } else if (max < 0.9) {
-            scoreText += " (elevator talk worthy)";
+            scoreText += " (watch live on your local news channel)";
         } else {
-            scoreText += " (live now on TV weird)";
+            scoreText += " (featured on weirdther.com)";
         }
 
         document.getElementById('summary').innerHTML += "<b>Weirdther Score:</b> " + scoreText + "<ul>" + text + "</ul>";
