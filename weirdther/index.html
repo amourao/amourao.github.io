@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html> 
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
     <title>Weirdther</title>
     <script src="app.js"></script>
     <style>
@@ -93,6 +94,11 @@
             <div class="form-row">
                 <label for="years_to_get_history">Years of History:</label>
                 <input type="number" id="years_to_get_history" value="24">
+            </div>
+
+            <div class="form-row">
+                <!-- button to clear local store-->
+                <button type="button" onclick="localStorage.clear();">Clear Local Storage</button>
             </div>
         </div>
 

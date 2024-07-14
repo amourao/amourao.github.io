@@ -5,28 +5,45 @@ const FRIENDLY_NAMES = {
         "lower": "colder",
         "higher": "warmer",
         "metric": "&#186;C",
-        "imperial": " F"
+        "imperial": " F",
+        "metric_short": "&#186;C",
+        "imperial_short": " F",
+        "colors": ["blue", "white", "red"],
+        "color_limits": [0, 50, 100],
     },
     "temperature_2m_min": {
         "name": "Min Temp",
         "lower": "colder",
         "higher": "warmer",
         "metric": "&#186;C",
-        "imperial": " F"
+        "imperial": " F",
+        "metric_short": "&#186;C",
+        "imperial_short": " F",
+        "colors": ["blue", "white", "red"],
+        "color_limits": [0, 50, 100]
     },
     "rain_sum": {
         "name": "Rain",
         "lower": "drier",
         "higher": "rainier",
         "metric": " mm",
-        "imperial": " inch"
+        "imperial": " inch",
+        "metric_short": " mm",
+        "imperial_short": " inch",
+        "colors": ["white", "blue"],
+        "color_limits": [0, 99]
     },
     "snowfall_sum": {
         "name": "Snow",
         "lower": "less snowy",
         "higher": "snowier",
         "metric": " mm",
-        "imperial": " inch"
+        "imperial": " inch",
+        "metric_short": " mm",
+        "imperial_short": " inch",
+        "colors": ["white", "blue"],
+        "color_limits": [0, 99]
+
     },
     "wind_speed_10m_max": {
         "name": "Wind",
@@ -34,6 +51,10 @@ const FRIENDLY_NAMES = {
         "higher": "windier",
         "metric": " km/h",
         "imperial": " mph",
+        "metric_short": " km/h",
+        "imperial_short": " mph",
+        "colors": ["blue", "lightgreen", "red"],
+        "color_limits": [0, 50, 100],
     }, 
     "sunshine_duration": {
         "name": "Sunshine",
@@ -41,6 +62,10 @@ const FRIENDLY_NAMES = {
         "higher": "sunnier",
         "metric": " hours",
         "imperial": " hours",
+        "metric_short": " h",
+        "imperial_short": " h",
+        "colors": ["gray", "yellow"],
+        "color_limits": [0, 68]
     },
 }
 
@@ -53,10 +78,12 @@ const SEPARATOR = "&nbsp;";
 const COLORS = ["gray", "#004074", "red" /*"#00c0b1"*/, "#00c0b1"];
 const SYMBOLS_RAW = ["#", "B", "S", "A"];
 // zip colors and symbols
-const SYMBOLS = SYMBOLS_RAW.map((x, i) => `<a href='####'><font title='%%%' color='${COLORS[i]}'>${x}</font></a>`);
+const SYMBOLS = SYMBOLS_RAW.map((x, i) => `<a href='###'><font title='%%%' color='${COLORS[i]}'>${x}</font></a>`);
 const COLUMN_WIDTH = 3;
 var SELF_LINK = null;
 
+
+var LINEAR_SCALE = true;
 
 window.onload = function() {
     // catch exceptions
@@ -239,12 +266,16 @@ async function getWeather(){
         }
         var text = "";
         for (const varName of varsToGetDaily) {
-            const datas = friendlyStats(historical_grouped[varName], current[info[1]]["daily"][varName], varName, units);
+            const datas = friendlyStats(historical_grouped[varName], current[info[1]]["daily"][varName], current[info[1]]["daily"]["time"], varName, units);
+            if (datas.length == 0) {
+                continue;
+            }
             text += "<li>" + datas[0] + "</li>\n";
             for (var i = 0; i < datas[1].length; i++) {
                 score[i] += datas[1][i];
                 scoreSum[i] += datas[2][i];
             }
+            text += datas[3] + "\n";
         }
         for (var i = 0; i < score.length; i++) {
             score[i] = score[i] / scoreSum[i] * 100;
@@ -305,6 +336,18 @@ function findPercentileForValue(data, value) {
 
 }
 
+
+function findPercentileForSpan(data, value) {
+    if (LINEAR_SCALE)
+        return  [(value - data[0]) / (data[data.length-1] - data[0]), 0, 0];
+    results = findPercentileForValue(data, value);
+    if (results[2] == -1) {
+        results[0] = 1;
+    }
+    return results;
+}
+
+
 function getPercentile(data, percentile) {
     const index = Math.floor(data.length * percentile);
     return data[index];
@@ -336,17 +379,42 @@ function maxValuesToValues(maxValues) {
     return values;
 }
 
-function friendlyStats(data, current_series, var_name, unit_type) {
+function friendlyStats(data, current_series, current_series_days, var_name, unit_type) {
+    // deep copy data
+    data = data.slice();
     var friendly_name = FRIENDLY_NAMES[var_name]["name"];
     data = data.sort((a, b) => parseFloat(a) - parseFloat(b));
     var mean = getMean(data);
     var median = getMedian(data);
+    var min = Math.min(...data);
+    var max = Math.max(...data);
     var series_percentile = [0, 0, 0]
     var series_mean = getMean(current_series);
     var series_median = getMedian(current_series);
     var series_min_max = [Math.min(...current_series), Math.max(...current_series)];
     var scores = [];
     var scoresSum = [];
+
+    if (var_name === "sunshine_duration") {
+        mean /= 3600;
+        median /= 3600;
+        min /= 3600;
+        max /= 3600;
+
+        series_mean /= 3600;
+        series_median /= 3600;
+        series_min_max[0] /= 3600;
+        series_min_max[1] /= 3600;
+
+        for (var i = 0; i < data.length; i++) {
+            data[i] /= 3600;
+        }
+
+        for (var i = 0; i < current_series.length; i++) {
+            current_series[i] /= 3600;
+        }
+    }
+
     for (var i = 0; i < current_series.length; i++) {
         const percentileData = findPercentileForValue(data, current_series[i]);
         series_percentile[0] += percentileData[0];
@@ -370,19 +438,14 @@ function friendlyStats(data, current_series, var_name, unit_type) {
     series_percentile[1] /= current_series.length;
     series_percentile[2] /= current_series.length;
 
-    if (var_name === "sunshine_duration") {
-        mean /= 3600;
-        median /= 3600;
-        series_mean /= 3600;
-        series_median /= 3600;
-        series_min_max[0] /= 3600;
-        series_min_max[1] /= 3600;
-    }
     if (series_min_max[0] === series_min_max[1]) {
         series_min_max = series_min_max[0].toFixed(1) + "";
     } else {
         series_min_max = series_min_max[0].toFixed(1) + "/" + series_mean.toFixed(1) + "/" + series_min_max[1].toFixed(1);
     }
+
+    var gradient = generateSpan(current_series, current_series_days, data, var_name, unit_type);
+
 
     var qualifier = "";
     var boldStart = "";
@@ -390,9 +453,10 @@ function friendlyStats(data, current_series, var_name, unit_type) {
     var topOrBottom = "";
     var percentilePretty = `${(series_percentile[0]*100).toFixed(0)}%`;
     if (series_mean === 0 && var_name === "rain_sum" && series_percentile[0] > 0.25 && series_percentile[0] < 0.75) {
-        return [`<b>${friendly_name}:</b> No rain expected, which is what is typical.`, scores, scoresSum]
+        return [`<b>${friendly_name}:</b> No rain expected, which is what is typical.`, scores, scoresSum, gradient];
     } else if (series_percentile[1] == 0 && series_percentile[2] == -1) {
-        return [`<b>${friendly_name}:</b> Not expected this time of year.`, scores, scoresSum];
+        // return [`<b>${friendly_name}:</b> Not expected this time of year.`, scores, scoresSum, gradient];
+        return []
     } else if (series_percentile[0] == 0) {
         qualifier = "the minimum value recorded for the time period!";
         boldStart = "<b style='color:blue'>";
@@ -424,8 +488,8 @@ function friendlyStats(data, current_series, var_name, unit_type) {
     }  else {
         qualifier = "close to what is expected.";
     }
-    return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} Historic median/mean ${median.toFixed(1)}/${mean.toFixed(1)}${FRIENDLY_NAMES[var_name][unit_type]} ${boldEnd}`, scores, scoresSum];
-    
+    //return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} Historic median/mean ${median.toFixed(1)}/${mean.toFixed(1)}${FRIENDLY_NAMES[var_name][unit_type]} ${boldEnd}`, scores, scoresSum, gradient];
+    return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} ${boldEnd}`, scores, scoresSum, gradient];
 }
 
 function printStats(data, current_value, var_name) {
@@ -791,4 +855,87 @@ function getCurrentValue(current, currentDate) {
         }
     }
     return currentVal;
+}
+
+function generateCssGradient(var_name, data) {
+    let colorList = FRIENDLY_NAMES[var_name]["colors"];
+    let colorListPercent = FRIENDLY_NAMES[var_name]["color_limits"];
+    let output = [];
+    for (var i = 0; i < colorList.length; i++) {
+        let index = Math.floor((data.length-1) * colorListPercent[i]/100);
+        let val = data[index];
+        let position = (val - data[0]) / (data[data.length-1] - data[0]) * 100;
+        output.push(`${colorList[i]} ${position}%`);
+    }
+    return `background: linear-gradient(to right, ${output.join(", ")});`;
+}
+
+function genBackground(text) {
+    // generate text with white background, black text and border
+    return `<div style="background-color: white; color: black; padding: 2px; border-radius: 1px;">${text}</div>`;
+}
+
+function generateSpan(current_series, current_series_days, historical_stats, var_name, unit_type) {
+    let unit_label = FRIENDLY_NAMES[var_name][unit_type + "_short"]
+    // put a point at 50% of the gradient
+    var data_for_median = historical_stats.slice().concat(current_series);
+    data_for_median = data_for_median.sort((a, b) => a - b);
+    
+    if (data_for_median[0] === data_for_median[data_for_median.length-1]) {
+        return "";
+    }
+
+    let gradient = generateCssGradient(var_name, data_for_median)
+
+
+    let point = "⬜";    
+    let points = "";
+    let text = ""
+    let textBottom = "";
+    let textTop = "";
+    let textTopTop = "";
+
+    let stdDevsToShow = [0, 0.01, 0.05, 0.32, 0.50, 0.68, 0.95, 0.99, 1];
+    let symbols = ["|", "", "", "", "|", "", "", "", "|"];
+    for (var i = 0; i < stdDevsToShow.length; i++) {
+        let index = Math.floor((historical_stats.length-1) * stdDevsToShow[i])
+        let val = historical_stats[index];
+        percentileData = findPercentileForSpan(data_for_median,  val);
+        position = percentileData[0] * 100;
+        let part1 = genBackground( val.toFixed(1))
+        let part2 = genBackground((stdDevsToShow[i]*100).toFixed(0) + "%")
+        textTop += `<span style="position: absolute; left: ${position}%; top: 0px; transform: translateX(-50%);">` + part1 + "</span>";
+        textTopTop += `<span style="position: absolute; left: ${position}%; top: -10px; transform: translateX(-50%);">`+ part2 + "</span>";
+        if (symbols[i] !== "") {
+            points += `<span style="position: absolute; left: ${position}%; top: -5px; transform: translateX(-50%);">${symbols[i]}</span>`;
+        }
+    }
+
+    for (var i = 0; i < current_series.length; i++) {
+        const percentileData = findPercentileForSpan(data_for_median, current_series[i]);
+        const day = current_series_days[i];
+        const position = percentileData[0] * 100;
+        // place the point at the right position, positions are relative to the gradient
+        var url = SELF_LINK
+        url.searchParams.set('date', day);
+        var link = `<a href="${url}">${point}</a>`;
+        points += `<span title="${day}" style="position: absolute; left: ${position}%; top: -5px; transform: translateX(-50%);">${link}</span>`;
+        if (current_series.length == 1) {
+            text += `<span style="position: absolute; left: ${position}%; top: 0px; transform: translateX(-50%);">` + current_series[i].toFixed(1) + unit_label + "</span>";
+            const percentileDataSeries = findPercentileForValue(historical_stats, current_series[i]);
+            const positionSeries = percentileDataSeries[0] * 100;
+            const part1 = genBackground(positionSeries.toFixed(0) + "%");  
+            textBottom += `<span style="position: absolute; left: ${position}%; top: 0px; transform: translateX(-50%);">` + part1 + "</span>";
+        }
+    }
+    
+    var bar = `<span style="position: relative; ${gradient}; width: 100%; height: 10px; display: inline-block;">${points}</span>`;
+
+    var textBarBottom = `<span style="position: relative; width: 100%; height: 10px; display: inline-block;">${textBottom}</span>`;
+    var textBar = `<span style="position: relative; width: 100%; height: 10px; display: inline-block;">${text}</span>`;
+    var textBarTop = `<span style="position: relative; width: 100%; height: 20px; display: inline-block;">${textTop}</span>`;
+    var textBarTopTop = `<span style="position: relative; width: 100%; height: 10px; display: inline-block;">${textTopTop}</span>`;
+
+
+    return `<div style="padding: 10px;  width: 100%; display: inline-block;">` + textBarTopTop + "\n" + textBarTop + "\n" +bar + "\n" + textBar + "\n" + textBarBottom + "</div>";  
 }
