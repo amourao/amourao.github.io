@@ -451,6 +451,7 @@ function friendlyStats(data, current_series, current_series_days, var_name, unit
     var boldStart = "";
     var boldEnd = "";
     var topOrBottom = "";
+    var noteDays = "";
     var percentilePretty = `${(series_percentile[0]*100).toFixed(0)}%`;
     if (series_mean === 0 && var_name === "rain_sum" && series_percentile[0] > 0.25 && series_percentile[0] < 0.75) {
         return [`<b>${friendly_name}:</b> No rain expected, which is what is typical.`, scores, scoresSum, gradient];
@@ -470,26 +471,32 @@ function friendlyStats(data, current_series, current_series_days, var_name, unit
         boldStart = "<b>";
         boldEnd = "</b>";
         topOrBottom = "Bottom " + percentilePretty;
+        noteDays = generateOnceEveryXDays(series_percentile[0]);
     } else if (series_percentile[0] > 0.95) {
         qualifier = "significantly " + FRIENDLY_NAMES[var_name]["higher"] + " than usual."
         boldStart = "<b>";
         boldEnd = "</b>";
         topOrBottom = "Top " + percentilePretty;
+        noteDays = generateOnceEveryXDays(series_percentile[0]);
     } else if (series_percentile[0] < 0.25) {
         qualifier = FRIENDLY_NAMES[var_name]["lower"] + " than usual.";
         boldStart = "<b>";
         boldEnd = "</b>";
         topOrBottom = "Bottom " + percentilePretty;
+        noteDays = generateOnceEveryXDays(series_percentile[0]);
     } else if (series_percentile[0] > 0.75) {
         qualifier = FRIENDLY_NAMES[var_name]["higher"] + " than usual.";
         boldStart = "<b>";
         boldEnd = "</b>";
         topOrBottom = "Top " + percentilePretty;
+        noteDays = generateOnceEveryXDays(series_percentile[0]);
     }  else {
         qualifier = "close to what is expected.";
     }
     //return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} Historic median/mean ${median.toFixed(1)}/${mean.toFixed(1)}${FRIENDLY_NAMES[var_name][unit_type]} ${boldEnd}`, scores, scoresSum, gradient];
     return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} ${boldEnd}`, scores, scoresSum, gradient];
+    //return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom}${noteDays} ${boldEnd}`, scores, scoresSum, gradient];
+ 
 }
 
 function printStats(data, current_value, var_name) {
@@ -938,4 +945,21 @@ function generateSpan(current_series, current_series_days, historical_stats, var
 
 
     return `<div style="padding: 10px;  width: 100%; display: inline-block;">` + textBarTopTop + "\n" + textBarTop + "\n" +bar + "\n" + textBar + "\n" + textBarBottom + "</div>";  
+}
+
+function generateOnceEveryXDays(percentile) {
+    let percentilePretty = 1-(Math.abs(0.5-percentile) + 0.5);
+    const days = Math.round(1/percentilePretty);
+    var start = ", should happen ";
+    if (days === 1) {
+        return start + "every day";
+    }
+    if (days === 7) {
+        return start + "every week";
+    }
+    if (days === 30) {
+        return start + "every month";
+    }
+    return start + ` every ${days} days`;
+    
 }
