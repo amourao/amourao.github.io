@@ -60,10 +60,10 @@ const FRIENDLY_NAMES = {
         "name": "Sunshine",
         "lower": "less sunny",
         "higher": "sunnier",
-        "metric": " hours",
-        "imperial": " hours",
-        "metric_short": " h",
-        "imperial_short": " h",
+        "metric": "% of daylight hours",
+        "imperial": " % of daylight hours",
+        "metric_short": "%",
+        "imperial_short": "%",
         "colors": ["gray", "yellow"],
         "color_limits": [0, 68]
     },
@@ -122,6 +122,7 @@ window.onload = function() {
             document.getElementById("location").value = "Current location";
             getWeather();
         });
+        return;
     }
     
     getWeather();
@@ -180,9 +181,15 @@ async function getWeather(){
         document.getElementById("geocode_result").innerHTML = latitude + ", " + longitude;
     }
 
-    const dateString = document.getElementById("date").value;
+    var dateString = document.getElementById("date").value;
     // parse YYYY-MM-DD to Date object
-    const date = new Date(dateString);
+    var date = new Date(dateString);
+    console.log(dateString, date);
+    if (date == null || isNaN(date.getTime())) {
+        date = new Date();
+        dateString = date.toISOString().slice(0, 10);
+        document.getElementById("date").value = dateString;
+    }
     const delta = document.getElementById("delta").value;
     const years_to_get_history = document.getElementById("years_to_get_history").value;
 
@@ -248,11 +255,14 @@ async function getWeather(){
     document.getElementById('summary').innerHTML = "";
 
     for (const varName of varsToGetDaily) {
-        let chart = createAsciiChart(varName, gg[varName], currentVal[varName], date, historical_grouped[varName]);
+        let chart = createAsciiChart(varName, gg[varName], currentVal[varName], date, historical_grouped[varName].slice());
         document.getElementById('chart').innerHTML += chart;
     }
 
     for (const info of [["Selected day",1], ["Days before",0], ["Days after",2]]) {
+        if (current[info[1]]["daily"]["time"].length == 0) {
+            continue;
+        }
         var days = current[info[1]]["daily"]["time"][0].replaceAll("-", "/");
         if (current[info[1]]["daily"]["time"].length > 1) {
             days += "-" + current[info[1]]["daily"]["time"][current[info[1]]["daily"]["time"].length-1].replaceAll("-", "/");
@@ -260,20 +270,28 @@ async function getWeather(){
         document.getElementById('summary').innerHTML += "<b>" + info[0] + ":</b> " + days + "<br>";
         let score = [];
         let scoreSum = [];
+        let percentiles = [];
         for (var i = 0; i < current[info[1]]["daily"]["time"].length; i++) {
             score.push(0);
-            scoreSum.push(0);
+            scoreSum.push(1);
+            percentiles.push(0);
         }
         var text = "";
         for (const varName of varsToGetDaily) {
-            const datas = friendlyStats(historical_grouped[varName], current[info[1]]["daily"][varName], current[info[1]]["daily"]["time"], varName, units);
+            if (varName == "time") {
+                continue;
+            }
+            const datas = friendlyStats(historical_grouped[varName], historical_grouped["time"], current[info[1]]["daily"][varName], current[info[1]]["daily"]["time"], varName, units, delta);
             if (datas.length == 0) {
                 continue;
             }
             text += "<li>" + datas[0] + "</li>\n";
             for (var i = 0; i < datas[1].length; i++) {
-                score[i] += datas[1][i];
-                scoreSum[i] += datas[2][i];
+                if (datas[1][i] > score[i] && varName != "sunshine_duration") {
+                    score[i] = datas[1][i];
+                    scoreSum[i] = datas[2][i];
+                    percentiles[i] = datas[4][i];
+                }
             }
             text += datas[3] + "\n";
         }
@@ -282,8 +300,8 @@ async function getWeather(){
         }
 
         const sorted = score.slice().sort((a, b) => a - b);
-
         const max = Math.max(...score) / 100;
+        const maxPercentile = Math.max(...percentiles);
 
         var scoreText = "";
 
@@ -296,15 +314,18 @@ async function getWeather(){
             scoreText += "-" + sorted[sorted.length-1].toFixed(0);
         }
 
-        if (max < 0.5) {
-            scoreText += " (what you signed up for)";
-        } else if (max < 0.7) {
-            scoreText += " (elevator gossip worthy)";
-        } else if (max < 0.9) {
-            scoreText += " (watch live on your local news channel)";
+        if (max < 0.75) {
+            scoreText += " (what you signed up for";
+        } else if (max < 0.98) {
+            scoreText += " (elevator gossip worthy";
+        } else if (max < 0.99) {
+            scoreText += " (watch live on your local news channel";
         } else {
-            scoreText += " (featured on weirdther.com)";
+            scoreText += " (what you tell your grandkids about";
         }
+
+        const message = generateOnceEveryXDays(maxPercentile);
+        scoreText += message + ")";
 
         document.getElementById('summary').innerHTML += "<b>Weirdther Score:</b> " + scoreText + "<ul>" + text + "</ul>";
     }
@@ -329,7 +350,7 @@ function findPercentileForValue(data, value) {
         return [0, firstIndex, lastIndex];
     }
     if (lastIndex === -1) {
-        return [0.5, firstIndex, lastIndex];
+        return [0.999, firstIndex, lastIndex];
     }
     const percentile = (firstIndex+lastIndex) / 2 / data.length;
     return [percentile, firstIndex, lastIndex];
@@ -379,11 +400,44 @@ function maxValuesToValues(maxValues) {
     return values;
 }
 
-function friendlyStats(data, current_series, current_series_days, var_name, unit_type) {
+function daysIntoYear(date){
+    return (Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - Date.UTC(date.getFullYear(), 0, 0)) / 24 / 60 / 60 / 1000;
+}
+
+function friendlyStats(data, data_days, current_series, current_series_days, var_name, unit_type, delta) {
     // deep copy data
     data = data.slice();
+    data_days = data_days.slice();
+    current_series = current_series.slice();
+    current_series_days = current_series_days.slice();
+
+    if (var_name === "sunshine_duration") {
+        for (var i = 0; i < data.length; i++) {
+            var correctionFactor = calculateDaylightCorrectionFactor(new Date(data_days[i])) * 36;
+            data[i] /= correctionFactor;
+        }
+        for (var i = 0; i < current_series.length; i++) {
+            var correctionFactor = calculateDaylightCorrectionFactor(new Date(current_series_days[i])) * 36;
+            current_series[i] /= correctionFactor;
+        }
+        decimalPlaces = 0;
+    }
+
+    // starting day of the year
+    var start_day_of_year = daysIntoYear(new Date(current_series_days[0])) - delta;
+    // ending day of the year
+    var end_day_of_year = daysIntoYear(new Date(current_series_days[current_series_days.length-1])) + delta;
     var friendly_name = FRIENDLY_NAMES[var_name]["name"];
-    data = data.sort((a, b) => parseFloat(a) - parseFloat(b));
+    // sort data_days and data by the order of data 
+    var combined = data_days.map((e, i) => [e, data[i]]);
+    // add current series and current series days to combined
+    combined = combined.concat(current_series_days.map((e, i) => [e, current_series[i]]));
+    combined = combined.filter((e) => daysIntoYear(new Date(e[0])) >= start_day_of_year && daysIntoYear(new Date(e[0])) <= end_day_of_year && new Date(e[0]) < new Date(current_series_days[current_series_days.length-1])).sort((a, b) => parseFloat(a[1]) - parseFloat(b[1]));
+    data_days = combined.map((e) => e[0]);
+    data = combined.map((e) => e[1]);
+
+
+
     var mean = getMean(data);
     var median = getMedian(data);
     var min = Math.min(...data);
@@ -394,26 +448,10 @@ function friendlyStats(data, current_series, current_series_days, var_name, unit
     var series_min_max = [Math.min(...current_series), Math.max(...current_series)];
     var scores = [];
     var scoresSum = [];
+    var percentiles = [];
+    var decimalPlaces = 1;
 
-    if (var_name === "sunshine_duration") {
-        mean /= 3600;
-        median /= 3600;
-        min /= 3600;
-        max /= 3600;
 
-        series_mean /= 3600;
-        series_median /= 3600;
-        series_min_max[0] /= 3600;
-        series_min_max[1] /= 3600;
-
-        for (var i = 0; i < data.length; i++) {
-            data[i] /= 3600;
-        }
-
-        for (var i = 0; i < current_series.length; i++) {
-            current_series[i] /= 3600;
-        }
-    }
 
     for (var i = 0; i < current_series.length; i++) {
         const percentileData = findPercentileForValue(data, current_series[i]);
@@ -421,30 +459,29 @@ function friendlyStats(data, current_series, current_series_days, var_name, unit
         series_percentile[1] += percentileData[1];
         series_percentile[2] += percentileData[2];
         const diff = Math.abs(percentileData[0] - 0.5);
-         if (diff == 0.5) {
-            scores.push(diff*3);
-        } else if (diff > 0.25) {
-            scores.push(diff*2)
-        } else {
-            scores.push(0);
+        percentiles.push(diff+0.5);
+        score = diff;
+        if (diff > 0.3) {
+            score = diff * 2;
         }
+        score = Math.pow(score, 2);
+        scores.push(score);
         if (series_percentile[1] == 0 && series_percentile[2] == -1)
             scoresSum.push(0);
         else
             scoresSum.push(1);
-
     }
     series_percentile[0] /= current_series.length;
     series_percentile[1] /= current_series.length;
     series_percentile[2] /= current_series.length;
 
     if (series_min_max[0] === series_min_max[1]) {
-        series_min_max = series_min_max[0].toFixed(1) + "";
+        series_min_max = series_min_max[0].toFixed(decimalPlaces) + "";
     } else {
-        series_min_max = series_min_max[0].toFixed(1) + "/" + series_mean.toFixed(1) + "/" + series_min_max[1].toFixed(1);
+        series_min_max = series_min_max[0].toFixed(decimalPlaces) + "/" + series_mean.toFixed(decimalPlaces) + "/" + series_min_max[1].toFixed(decimalPlaces);
     }
 
-    var gradient = generateSpan(current_series, current_series_days, data, var_name, unit_type);
+    var gradient = generateSpan(current_series, current_series_days, data, data_days, var_name, unit_type);
 
 
     var qualifier = "";
@@ -454,7 +491,7 @@ function friendlyStats(data, current_series, current_series_days, var_name, unit
     var noteDays = "";
     var percentilePretty = `${(series_percentile[0]*100).toFixed(0)}%`;
     if (series_mean === 0 && var_name === "rain_sum" && series_percentile[0] > 0.25 && series_percentile[0] < 0.75) {
-        return [`<b>${friendly_name}:</b> No rain expected, which is what is typical.`, scores, scoresSum, gradient];
+        return [`<b>${friendly_name}:</b> No rain expected, which is what is typical.`, scores, scoresSum, gradient, percentiles];
     } else if (series_percentile[1] == 0 && series_percentile[2] == -1) {
         // return [`<b>${friendly_name}:</b> Not expected this time of year.`, scores, scoresSum, gradient];
         return []
@@ -493,13 +530,14 @@ function friendlyStats(data, current_series, current_series_days, var_name, unit
     }  else {
         qualifier = "close to what is expected.";
     }
+
+
     //return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} Historic median/mean ${median.toFixed(1)}/${mean.toFixed(1)}${FRIENDLY_NAMES[var_name][unit_type]} ${boldEnd}`, scores, scoresSum, gradient];
-    return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} ${boldEnd}`, scores, scoresSum, gradient];
-    //return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom}${noteDays} ${boldEnd}`, scores, scoresSum, gradient];
+    return [`<b>${friendly_name}:</b> ${boldStart}${series_min_max}${FRIENDLY_NAMES[var_name][unit_type]} is ${qualifier} ${topOrBottom} ${boldEnd}`, scores, scoresSum, gradient, percentiles];
  
 }
 
-function printStats(data, current_value, var_name) {
+function printStats(data, current_value, var_name, current_date) {
     data = data.sort((a, b) => parseFloat(a) - parseFloat(b));
     var mean = getMean(data);
     var std = getStd(data);
@@ -510,13 +548,15 @@ function printStats(data, current_value, var_name) {
     var p95 = getPercentile(data, 0.95);
     var percentile = findPercentileForValue(data, current_value);
     if (var_name === "sunshine_duration") {
-        mean = mean / 3600;
-        median = median / 3600;
-        p5 = p5 / 3600;
-        p25 = p25 / 3600;
-        p75 = p75 / 3600;
-        p95 = p95 / 3600;
-        current_value = current_value / 3600;
+        var correctionFactor = calculateDaylightCorrectionFactor(new Date(current_date)) * 36;
+        mean = mean / correctionFactor;
+        median = median / correctionFactor;
+        std = std / correctionFactor;
+        p5 = p5 / correctionFactor;
+        p25 = p25 / correctionFactor;
+        p75 = p75 / correctionFactor;
+        p95 = p95 / correctionFactor;
+        current_value = current_value / correctionFactor;
     }
     return `mean: ${mean.toFixed(2)}, std: ${std.toFixed(2)}, 5%: ${p5.toFixed(2)}, 25%: ${p25.toFixed(2)}, 50%: ${median.toFixed(2)}, 75%: ${p75.toFixed(2)}, 95%: ${p95.toFixed(2)}<br>current value: ${current_value.toFixed(2)}, percentile: ${percentile[0].toFixed(2)}`;
 }
@@ -529,18 +569,11 @@ async function getCurrentWeather(location = DEFAULT_LOCATION, current_date = new
     }
 
     location = [location[0].toFixed(2), location[1].toFixed(2)];
-    const key = `current-${current_date.toISOString().split('T')[0]}-${delta}-${location[0]}-${location[1]}-${unitsType}`;
-    const storedData = localStorage.getItem(key);
-    if (storedData) {
-        return JSON.parse(storedData);
-    }
-
-
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${location[0]}&longitude=${location[1]}&current=${VARS_TO_GET_HOURLY}&daily=${VARS_TO_GET_DAILY}&past_days=${delta}&${unitString}`;
+    console.log("Fetching current weather from: " + url);
     const response = await fetch(url);
     const data = await response.json();
     
-    localStorage.setItem(key, JSON.stringify(data));
     return data;
 }
 
@@ -567,6 +600,89 @@ function splitPastPresentFuture(data, current_date) {
     return daily;
 }
 
+async function getWeatherData(start, end, location, unitsType, unitString) {
+    var output = {};
+    var i = 0;
+    var missingDays = [];
+    // if end > today, set end to today
+    if (end > new Date()) {
+        end = new Date();
+    }
+    for (var date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+        const key = `historical-${date.toISOString().split('T')[0]}-${location[0]}-${location[1]}-${unitsType}.json`;
+        const storedData = localStorage.getItem(key);
+        if (!storedData) {
+            missingDays.push(new Date(date));
+        }
+        i++;
+    }
+    // while missingDays are consecutive, fetch them in one go
+    while (missingDays.length > 0) {
+        var internalStart = missingDays[0];
+        var internalEnd = missingDays[0];
+        for (var i = 1; i < missingDays.length; i++) {
+            if (missingDays[i].getTime() === internalEnd.getTime() + 24 * 60 * 60 * 1000) {
+                internalEnd = missingDays[i];
+            } else {
+                break;
+            }
+        }
+        // remove from missingDays
+        missingDays = missingDays.filter(day => day < internalStart || day > internalEnd);
+
+        const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location[0]}&longitude=${location[1]}&start_date=${internalStart.toISOString().split('T')[0]}&end_date=${internalEnd.toISOString().split('T')[0]}&daily=${VARS_TO_GET_DAILY}&${unitString}`;
+        console.log("Fetching missing days from: " + url);
+        const response = await fetch(url);
+        const data = await response.json();
+        // iterate per day between start and end, if not in data, add null
+        if (!data || !data.daily || !data.daily.time) {
+            return {}
+        }
+
+        for (let i = 0; i < data.daily.time.length; i++) {
+            var day = data.daily.time[i];
+            const key = `historical-${day}-${location[0]}-${location[1]}-${unitsType}.json`;
+            // build a copy of the data object, but only for this day
+            var dayData = JSON.parse(JSON.stringify(data));
+            dayData.daily = {};
+            for (var varName in data.daily) {
+                dayData.daily[varName] = [data.daily[varName][i]];
+            }
+            localStorage.setItem(key, JSON.stringify(dayData));
+        }
+    }
+
+    var output = {};
+    var i = 0;
+    var missingDays = [];
+    for (var date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+        const key = `historical-${date.toISOString().split('T')[0]}-${location[0]}-${location[1]}-${unitsType}.json`;
+        const storedData = localStorage.getItem(key);
+
+        if (!output.daily) {
+            output = JSON.parse(storedData);
+            i++;
+            continue;
+        }
+        if (storedData) {
+            var output_day = JSON.parse(storedData);
+            for (var varName in output_day["daily"]) {
+                if (!output.daily[varName]) {
+                    output.daily[varName] = [];
+                }
+                // append arrays
+                output.daily[varName].push(...output_day["daily"][varName]);
+            }
+        }
+        i++;
+    }
+
+    // if today's key was fetched, removed stored key for today, to allow updating
+    const todayKey = `historical-${new Date().toISOString().split('T')[0]}-${location[0]}-${location[1]}-${unitsType}.json`;
+    localStorage.removeItem(todayKey);
+    return output;
+}
+
 async function getHistoricalWeatherCurrent(location, current_date = new Date(), delta = DEFAULT_DELTA, unitsType = "metric") {
     // format location to two decimal places
     var unitString = METRIC
@@ -581,17 +697,7 @@ async function getHistoricalWeatherCurrent(location, current_date = new Date(), 
     if (end > new Date()) {
         end = new Date();
     }
-    const key = `historical-current-${start.toISOString().split('T')[0]}-${end.toISOString().split('T')[0]}-${location[0]}-${location[1]}-${unitsType}.json`;
-    const storedData = localStorage.getItem(key);
-    if (storedData) {
-        return JSON.parse(storedData);
-    }
-    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location[0]}&longitude=${location[1]}&start_date=${start.toISOString().split('T')[0]}&end_date=${end.toISOString().split('T')[0]}&daily=${VARS_TO_GET_DAILY}&${unitString}`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-    localStorage.setItem(key, JSON.stringify(data));
-    return data;
+    return await getWeatherData(start, end, location, unitsType, unitString);
 }
 
 
@@ -606,25 +712,20 @@ async function getHistoricalWeather(location, current_date = new Date(), delta =
     const datas = [];
     var current_date_to = new Date(current_date);
     for (let i = 0; i < years; i++) {
+
+        const start = new Date(current_date_to.getTime() - delta * 24 * 60 * 60 * 1000);
+        const end = new Date(current_date_to.getTime() + delta * 24 * 60 * 60 * 1000);        
+        await getWeatherData(start, end, location, unitsType, unitString).then((data) => {
+            if (data && data["daily"] && data["daily"]["time"] && data["daily"]["time"].length > 0) {
+                datas.push(data);
+            }
+        });
+
         if ((current_date_to.getFullYear() % 4 === 0 && current_date_to.getFullYear() % 100 !== 0) || current_date_to.getFullYear() % 400 === 0) {
             current_date_to.setDate(current_date_to.getDate() - 366);
         } else {
             current_date_to.setDate(current_date_to.getDate() - 365);
         }
-        const start = new Date(current_date_to.getTime() - delta * 24 * 60 * 60 * 1000);
-        const end = new Date(current_date_to.getTime() + delta * 24 * 60 * 60 * 1000);
-        const key = `historical-${start.toISOString().split('T')[0]}-${end.toISOString().split('T')[0]}-${location[0]}-${location[1]}-${unitsType}.json`;
-        const storedData = localStorage.getItem(key);
-        if (storedData) {
-            datas.push(JSON.parse(storedData));
-            continue;
-        }
-        const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location[0]}&longitude=${location[1]}&start_date=${start.toISOString().split('T')[0]}&end_date=${end.toISOString().split('T')[0]}&daily=${VARS_TO_GET_DAILY}&${unitString}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        localStorage.setItem(key, JSON.stringify(data));
-        datas.push(data);
-        
     }
     return datas;
 }
@@ -686,6 +787,10 @@ function groupByValue(datas) {
                     perValue[varName].push(val);
                 }
             }
+            if (!("time" in perValue)) {
+                perValue["time"] = [];
+            }
+            perValue["time"].push(day);
         }
     }
     return perValue;
@@ -707,7 +812,8 @@ function createHistogram(datas, current_date = null) {
                 var varName = vars[k] + "";
                 var val = data["daily"][varName][j];
                 if (varName === "sunshine_duration") {
-                    val = val / 3600;
+                    var correctionFactor = calculateDaylightCorrectionFactor(new Date(day)) * 36;
+                    val = val / correctionFactor;
                 }
                 val = Math.round(val) + "";
                 if (current_date && day == current_date.toISOString().slice(0, 10)) {
@@ -809,7 +915,6 @@ function createAsciiChart(name, groupedData, currentVal, currentDate, historical
     }
     let maxValue = Math.max(...Object.values(maxValues));
     
-    // fill missing values
     let asciiTable = "";
     for (let i = maxValue; i > 0; i--) {
         let line = "|";
@@ -831,8 +936,8 @@ function createAsciiChart(name, groupedData, currentVal, currentDate, historical
         }
         asciiTable += line + "<br>";
     }
-    asciiTable += SEPARATOR +  "-".repeat(sortedHistoricalDataKeys.length*COLUMN_WIDTH) + "-><br>";
-    let line = SEPARATOR;
+    asciiTable += SEPARATOR +  "-".repeat((sortedHistoricalDataKeys.length-1)*COLUMN_WIDTH) + "--><br>" + SEPARATOR;
+    let line = "";
     for (let varName in sortedHistoricalDataKeys) {
         varValues = sortedHistoricalDataKeys[varName];
         varValueString = varValues + "";
@@ -845,8 +950,8 @@ function createAsciiChart(name, groupedData, currentVal, currentDate, historical
         line += SEPARATOR.repeat(COLUMN_WIDTH-varValueString.length) + varValueString;
     }
     line += "<br>";
-    const stats = printStats(historical_grouped, currentVal, name);
-    return `${asciiTable}${line}${name}<br>${stats}<br></br>`;
+    const stats = printStats(historical_grouped, currentVal, name, currentDate);
+    return `<div class="chart-container">${asciiTable}${line}${name}<br>${stats}<br></br></div>`;
 }
 
 function getCurrentValue(current, currentDate) {
@@ -882,12 +987,18 @@ function genBackground(text) {
     return `<div style="background-color: white; color: black; padding: 2px; border-radius: 1px;">${text}</div>`;
 }
 
-function generateSpan(current_series, current_series_days, historical_stats, var_name, unit_type) {
+function generateSpan(current_series, current_series_days, historical_stats, historical_stats_days, var_name, unit_type) {
     let unit_label = FRIENDLY_NAMES[var_name][unit_type + "_short"]
     // put a point at 50% of the gradient
     var data_for_median = historical_stats.slice().concat(current_series);
-    data_for_median = data_for_median.sort((a, b) => a - b);
+    var days_for_median = historical_stats_days.slice().concat(current_series_days);
+    // sort data_days and data by the order of data 
+    var combined = days_for_median.map((e, i) => [e, data_for_median[i]]);
+    combined = combined.sort((a, b) => parseFloat(a[1]) - parseFloat(b[1]));
     
+    days_for_median = combined.map((e) => e[0]);
+    data_for_median = combined.map((e) => e[1]);
+
     if (data_for_median[0] === data_for_median[data_for_median.length-1]) {
         return "";
     }
@@ -907,11 +1018,14 @@ function generateSpan(current_series, current_series_days, historical_stats, var
     for (var i = 0; i < stdDevsToShow.length; i++) {
         let index = Math.floor((historical_stats.length-1) * stdDevsToShow[i])
         let val = historical_stats[index];
+        let date = historical_stats_days[index];
+        var url = SELF_LINK
+        url.searchParams.set('date', date);
         percentileData = findPercentileForSpan(data_for_median,  val);
         position = percentileData[0] * 100;
         let part1 = genBackground( val.toFixed(1))
         let part2 = genBackground((stdDevsToShow[i]*100).toFixed(0) + "%")
-        textTop += `<span style="position: absolute; left: ${position}%; top: 0px; transform: translateX(-50%);">` + part1 + "</span>";
+        textTop += `<span style="position: absolute; left: ${position}%; top: 0px; transform: translateX(-50%);"><a title="${date}" href="${url}">` + part1 + "</a></span>";
         textTopTop += `<span style="position: absolute; left: ${position}%; top: -10px; transform: translateX(-50%);">`+ part2 + "</span>";
         if (symbols[i] !== "") {
             points += `<span style="position: absolute; left: ${position}%; top: -5px; transform: translateX(-50%);">${symbols[i]}</span>`;
@@ -937,7 +1051,6 @@ function generateSpan(current_series, current_series_days, historical_stats, var
     }
     
     var bar = `<span style="position: relative; ${gradient}; width: 100%; height: 10px; display: inline-block;">${points}</span>`;
-
     var textBarBottom = `<span style="position: relative; width: 100%; height: 10px; display: inline-block;">${textBottom}</span>`;
     var textBar = `<span style="position: relative; width: 100%; height: 10px; display: inline-block;">${text}</span>`;
     var textBarTop = `<span style="position: relative; width: 100%; height: 20px; display: inline-block;">${textTop}</span>`;
@@ -948,18 +1061,47 @@ function generateSpan(current_series, current_series_days, historical_stats, var
 }
 
 function generateOnceEveryXDays(percentile) {
-    let percentilePretty = 1-(Math.abs(0.5-percentile) + 0.5);
+    let percentilePretty = 1-(Math.abs(0.5-percentile))*2; 
     const days = Math.round(1/percentilePretty);
     var start = ", should happen ";
     if (days === 1) {
-        return start + "every day";
+        return start + "every other day";
     }
     if (days === 7) {
-        return start + "every week";
+        return start + "once per week";
     }
     if (days === 30) {
-        return start + "every month";
+        return start + "once per month";
     }
-    return start + ` every ${days} days`;
+    if (isNaN(days) || !isFinite(days)) {
+        return ", never happened before!";
+    }
+    return start + `once every ${days} days`;
     
+}
+
+function calculateDaylightCorrectionFactor(day) {
+    // Calculate the day of the year (1-365)
+    var lat = parseFloat(document.getElementById("latitude").value);
+    const start = new Date(day.getFullYear(), 0, 0);
+    const diff = day - start;
+    const oneDay = 1000 * 60 * 60 * 24;
+    const dayOfYear = Math.floor(diff / oneDay);
+
+    return calculateDayLength(lat, dayOfYear);
+}
+
+function calculateDayLength(latitude, dayOfYear) {
+  const declination = 23.44 * Math.sin((360/365) * (284 + dayOfYear) * Math.PI/180);
+  const latRad = latitude * Math.PI/180;
+  const decRad = declination * Math.PI/180;
+  
+  const cosHourAngle = -Math.tan(latRad) * Math.tan(decRad);
+  
+  // Handle polar day/night
+  if (cosHourAngle > 1) return 0;    // Polar night
+  if (cosHourAngle < -1) return 24;  // Polar day
+  
+  const hourAngle = Math.acos(cosHourAngle) * 180/Math.PI;
+  return (2/15) * hourAngle;
 }

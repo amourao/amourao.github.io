@@ -39,8 +39,13 @@
             display: none;
         }
 
+        .chart-container {
+            overflow-x: scroll;
+            width: fit-content;
+        }
+
         @media (min-width: 800px) {
-            form, #summary, #chart, #geocode, #header {
+            form, #summary, #geocode, #header, #chart {
                 width: 800px;
             }
         }
@@ -112,7 +117,7 @@
         <b>Results for: </b> <span id="geocode_result"></span>
     </div>
     <div id="summary"></div>
-    <div id="chart" style="font-family: monospace;"></div>
+    <div id="chart" style="font-family: monospace; overflow-x: scroll;"></div>
 
 </body>
 </html>
