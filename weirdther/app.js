@@ -227,11 +227,9 @@ async function getWeather(){
         // too far in the future
         document.getElementById('summary').innerHTML = "Date too far in the future";
         return;
-    } else if (date.toISOString().slice(0, 10) >= current_date.toISOString().slice(0, 10)) {
-        current = await getCurrentWeather([latitude, longitude], date, delta, units)
     } else if (date > delta_starts) {
         // delta is in days
-        currentA = await getCurrentWeather([latitude, longitude], date, delta, units);
+        currentA = await getCurrentWeather([latitude, longitude], units);
         currentB = await getHistoricalWeatherCurrent([latitude, longitude], date, delta, units);
         current = mergeCurrentHistorical(currentA, currentB, delta_starts.toISOString().slice(0, 10), delta_ends.toISOString().slice(0, 10));
     } else {
@@ -287,7 +285,7 @@ async function getWeather(){
             }
             text += "<li>" + datas[0] + "</li>\n";
             for (var i = 0; i < datas[1].length; i++) {
-                if (datas[1][i] > score[i] && varName != "sunshine_duration") {
+                if (datas[1][i] > score[i] && varName != "sunshine_duration" && varName != "wind_speed_10m_max") {
                     score[i] = datas[1][i];
                     scoreSum[i] = datas[2][i];
                     percentiles[i] = datas[4][i];
@@ -561,7 +559,7 @@ function printStats(data, current_value, var_name, current_date) {
     return `mean: ${mean.toFixed(2)}, std: ${std.toFixed(2)}, 5%: ${p5.toFixed(2)}, 25%: ${p25.toFixed(2)}, 50%: ${median.toFixed(2)}, 75%: ${p75.toFixed(2)}, 95%: ${p95.toFixed(2)}<br>current value: ${current_value.toFixed(2)}, percentile: ${percentile[0].toFixed(2)}`;
 }
 
-async function getCurrentWeather(location = DEFAULT_LOCATION, current_date = new Date(), delta = DEFAULT_DELTA, unitsType = "metric") {
+async function getCurrentWeather(location = DEFAULT_LOCATION, unitsType = "metric") {
     // format location to three decimal places
     var unitString = METRIC
     if (unitsType === "imperial") {
@@ -569,7 +567,7 @@ async function getCurrentWeather(location = DEFAULT_LOCATION, current_date = new
     }
 
     location = [location[0].toFixed(2), location[1].toFixed(2)];
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${location[0]}&longitude=${location[1]}&current=${VARS_TO_GET_HOURLY}&daily=${VARS_TO_GET_DAILY}&past_days=${delta}&${unitString}`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${location[0]}&longitude=${location[1]}&current=${VARS_TO_GET_HOURLY}&daily=${VARS_TO_GET_DAILY}&${unitString}`;
     console.log("Fetching current weather from: " + url);
     const response = await fetch(url);
     const data = await response.json();
@@ -762,9 +760,18 @@ function mergeCurrentHistorical(current, historical, start, end) {
             }
         }
     }
-    // sort by date
+
+    // sort all lists by the order of time
+    var combined = merged["time"].map((e, i) => {
+        var obj = {};
+        for (var varName in merged) {
+            obj[varName] = merged[varName][i];
+        }
+        return obj;
+    });
+    combined.sort((a, b) => (a["time"] > b["time"]) ? 1 : ((b["time"] > a["time"]) ? -1 : 0));
     for (var varName in merged) {
-        merged[varName] = merged[varName].sort((a, b) => new Date(a) - new Date(b));
+        merged[varName] = combined.map((e) => e[varName]);
     }
 
     return {"daily": merged};
@@ -951,7 +958,7 @@ function createAsciiChart(name, groupedData, currentVal, currentDate, historical
     }
     line += "<br>";
     const stats = printStats(historical_grouped, currentVal, name, currentDate);
-    return `<div class="chart-container">${asciiTable}${line}${name}<br>${stats}<br></br></div>`;
+    return `<div style="overflow-x: scroll"><div class="chart-container">${asciiTable}${line}${name}<br>${stats}<br></br></div></div>`;
 }
 
 function getCurrentValue(current, currentDate) {
