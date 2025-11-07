@@ -213,17 +213,17 @@ async function getWeather(){
 
     SELF_LINK = url;
 
-
-
-    const current_date = new Date();
     // today or yesterday
     let current = null;
-    let delta_starts = new Date()
-    delta_starts.setDate(new Date().getDate()-parseInt(delta));
+    let delta_starts = new Date(date)
+    delta_starts.setDate(new Date(date).getDate()-parseInt(delta));
     let delta_ends = new Date()
-    delta_ends.setDate(new Date().getDate()+parseInt(6));
+    delta_ends.setDate(new Date().getDate()+parseInt(16));
+    // set delta_ends at midnight
+    delta_ends.setHours(0, 0, 0, 0);
 
-    if (date > delta_ends) {
+    console.log(date, delta_starts, delta_ends);
+    if (date >= delta_ends) {
         // too far in the future
         document.getElementById('summary').innerHTML = "Date too far in the future";
         return;
@@ -231,11 +231,12 @@ async function getWeather(){
         // delta is in days
         currentA = await getCurrentWeather([latitude, longitude], units);
         currentB = await getHistoricalWeatherCurrent([latitude, longitude], date, delta, units);
+        
         current = mergeCurrentHistorical(currentA, currentB, delta_starts.toISOString().slice(0, 10), delta_ends.toISOString().slice(0, 10));
     } else {
         current = await getHistoricalWeatherCurrent([latitude, longitude], date, delta, units);
     }
-    const parsedData = splitPastPresentFuture(current, date);
+    const parsedData = splitPastPresentFuture(current, date, delta);
     current = parsedData;
 
     const historical = await getHistoricalWeather([latitude, longitude], date, delta, years_to_get_history, units);
@@ -567,7 +568,7 @@ async function getCurrentWeather(location = DEFAULT_LOCATION, unitsType = "metri
     }
 
     location = [location[0].toFixed(2), location[1].toFixed(2)];
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${location[0]}&longitude=${location[1]}&current=${VARS_TO_GET_HOURLY}&daily=${VARS_TO_GET_DAILY}&${unitString}`;
+    const url = `https://api.open-meteo.com/v1/forecast?forecast_days=16&latitude=${location[0]}&longitude=${location[1]}&current=${VARS_TO_GET_HOURLY}&daily=${VARS_TO_GET_DAILY}&${unitString}`;
     console.log("Fetching current weather from: " + url);
     const response = await fetch(url);
     const data = await response.json();
@@ -575,9 +576,13 @@ async function getCurrentWeather(location = DEFAULT_LOCATION, unitsType = "metri
     return data;
 }
 
-function splitPastPresentFuture(data, current_date) {
+function splitPastPresentFuture(data, current_date, delta) {
     var daily = [{"daily": {}}, {"daily": {}}, {"daily": {}}];
     var vars = ("time," + VARS_TO_GET_DAILY).split(",");
+    var today = current_date.toISOString().split('T')[0];
+    var delta_ends = new Date(current_date);
+    delta_ends.setDate(new Date(current_date).getDate()+parseInt(delta));
+    var last_day = delta_ends.toISOString().split('T')[0];
     for (var k = 0; k < vars.length; k++) {
         var varName = vars[k] + "";
         for (var i = 0; i < daily.length; i++) {
@@ -585,12 +590,12 @@ function splitPastPresentFuture(data, current_date) {
         }
         for (var i = 0; i < data["daily"]["time"].length; i++) {
             var day = data["daily"]["time"][i];
-            var today = current_date.toISOString().split('T')[0];
+            
             if (day === today) {
                 daily[1]["daily"][varName].push(data["daily"][varName][i]);
             } else if (today > day) {
                 daily[0]["daily"][varName].push(data["daily"][varName][i]);
-            } else {
+            } else if  (day <= last_day) {
                 daily[2]["daily"][varName].push(data["daily"][varName][i]);
             }
         }
@@ -731,22 +736,26 @@ async function getHistoricalWeather(location, current_date = new Date(), delta =
 function mergeCurrentHistorical(current, historical, start, end) {
     // merge current and historical data, without adding duplicates, and only for the given start and end dates
     // start with current data
-    perValue = current["daily"]
     // add missing values from historical data
-    for (var j = 0; j < historical["daily"]["time"].length; j++) {
-        var day = historical["daily"]["time"][j];
-        var vars = VARS_TO_GET_DAILY.split(",");
-        var offset = perValue["time"].indexOf(day);
-        if (offset === -1) {
-            perValue["time"].push(day);
-        }
-        for (var k = 0; k < vars.length; k++) {
-            var varName = vars[k] + "";
-            var val = historical["daily"][varName][j];
+    
+
+    perValue = current["daily"]
+    if (historical["daily"] != null) {
+        for (var j = 0; j < historical["daily"]["time"].length; j++) {
+            var day = historical["daily"]["time"][j];
+            var vars = VARS_TO_GET_DAILY.split(",");
+            var offset = perValue["time"].indexOf(day);
             if (offset === -1) {
-                perValue[varName].push(val);
-            } else if (val !== null) {
-                perValue[varName][offset] = val;
+                perValue["time"].push(day);
+            }
+            for (var k = 0; k < vars.length; k++) {
+                var varName = vars[k] + "";
+                var val = historical["daily"][varName][j];
+                if (offset === -1) {
+                    perValue[varName].push(val);
+                } else if (val !== null) {
+                    perValue[varName][offset] = val;
+                }
             }
         }
     }
