@@ -1,0 +1,3 @@
+[submodule "weirdther"]
+	path = weirdther
+	url = https://github.com/amourao/weirdther.git
