@@ -1,3 +1,6 @@
 [submodule "weirdther"]
 	path = weirdther
 	url = https://github.com/amourao/weirdther.git
+[submodule "btt-aamb"]
+	path = btt-aamb
+	url = https://github.com/amourao/btt-aamb.git
